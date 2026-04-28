@@ -17,7 +17,6 @@ importScripts(
   './tools/tool-executor.js',
   './workflows/form-workflow.js',
   './llm/llm.js',
-  './suggestions.js',
   './agent/agent-runner.js',
 );
 
@@ -79,13 +78,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         currentGoal: CopilotSw.agentState.currentGoal,
       });
     }).catch(err => {
-      sendResponse({ error: err.message });
-    });
-    return true;
-  }
-
-  if (request.action === 'getSuggestedPrompts') {
-    CopilotSw.getSuggestedPrompts().then(sendResponse).catch(err => {
       sendResponse({ error: err.message });
     });
     return true;

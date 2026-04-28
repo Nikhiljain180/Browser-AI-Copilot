@@ -48,7 +48,9 @@ function extractAccessibilityTree(focusArea = null) {
     links: [],
     buttons: [],
     inputs: [],
-    textContent: []
+    textContent: '',
+    textContentLength: 0,
+    sections: []
   };
 
   // Extract key interactive elements
@@ -277,10 +279,44 @@ function extractLinks(tree) {
 }
 
 function extractTextContent(tree) {
-  // Extract visible text content (first 500 chars of main content)
   const mainContent = document.querySelector('main, article, [role="main"]') || document.body;
-  const textContent = mainContent.innerText.substring(0, 500);
-  tree.textContent = textContent;
+  const rawText = String(mainContent?.innerText || '').trim();
+
+  tree.textContentLength = rawText.length;
+  tree.textContent = rawText.substring(0, 12000);
+  tree.sections = extractSectionSummaries(mainContent);
+}
+
+function extractSectionSummaries(root) {
+  if (!root) return [];
+
+  const results = [];
+  const seenTitles = new Set();
+
+  const candidateSections = Array.from(root.querySelectorAll('section, article, [role="region"]'));
+  for (const section of candidateSections) {
+    const heading = section.querySelector('h1, h2, h3, [role="heading"]');
+    const title = String(heading?.innerText || '').trim();
+    if (!title) continue;
+
+    const normalizedTitle = title.replace(/\s+/g, ' ').toLowerCase();
+    if (seenTitles.has(normalizedTitle)) continue;
+
+    const text = String(section.innerText || '').trim();
+    if (text.length < 40) continue;
+
+    seenTitles.add(normalizedTitle);
+    results.push({
+      title,
+      selector: generateSelector(section),
+      text: text.substring(0, 3000),
+      length: text.length
+    });
+
+    if (results.length >= 10) break;
+  }
+
+  return results;
 }
 
 // ============================================
@@ -614,7 +650,6 @@ function observeDOMChanges() {
   const observer = new MutationObserver((mutations) => {
     console.log('[Content Script] DOM changed - Ready for re-extraction');
     // Service Worker will re-trigger perception if needed
-    // Some sites (SPAs) swap content without navigation events; refresh starters when title/URL changes.
     schedulePageContextChanged('mutation');
   });
 

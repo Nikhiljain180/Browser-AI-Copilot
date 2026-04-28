@@ -56,18 +56,6 @@
           Try research, summaries, form filling, or guided actions. The panel will show
           live progress while the agent works.
         </p>
-
-        <div class="prompt-chips">
-          <button
-            v-for="prompt in quickPrompts"
-            :key="prompt"
-            class="prompt-chip"
-            type="button"
-            @click="prefillPrompt(prompt)"
-          >
-            {{ prompt }}
-          </button>
-        </div>
       </div>
 
       <template v-else>
@@ -119,9 +107,11 @@
             </template>
             <template v-else-if="getMessageList(message.content).length">
               <ul class="message-list">
-                <li v-for="(item, itemIndex) in getMessageList(message.content)" :key="`${index}-${itemIndex}`">
-                  {{ item }}
-                </li>
+                <li
+                  v-for="(item, itemIndex) in getMessageList(message.content)"
+                  :key="`${index}-${itemIndex}`"
+                  v-html="formatRichText(item)"
+                ></li>
               </ul>
             </template>
             <p v-else class="message-content" v-html="formatRichText(message.content)" />
@@ -272,14 +262,6 @@ let errorTimeoutId = null;
 let liveThoughtId = 0;
 let chatMutationObserver = null;
 let chatResizeObserver = null;
-let promptRefreshTimeoutId = null;
-
-const defaultQuickPrompts = [
-  'Summarize this page in 5 bullets',
-  'Find the main CTA and explain it',
-  'Draft a reply based on this page',
-];
-const quickPrompts = ref([...defaultQuickPrompts]);
 
 const visibleMessages = computed(() => {
   return messages.value.filter(message => message.role !== 'tool');
@@ -411,11 +393,6 @@ function formatTime(timestamp) {
   });
 }
 
-async function prefillPrompt(prompt) {
-  draft.value = prompt;
-  await submitPrompt();
-}
-
 function sendRuntimeMessage(payload) {
   return new Promise((resolve, reject) => {
     chrome.runtime.sendMessage(payload, (response) => {
@@ -453,6 +430,22 @@ function getMessageList(content) {
       }
     }
   }
+
+  // Markdown-style bullet / numbered lists.
+  const lines = normalized.replace(/\r/g, '').split('\n');
+  const items = [];
+  for (const line of lines) {
+    const bulletMatch = line.match(/^\s*(?:[-*•])\s+(.+?)\s*$/);
+    if (bulletMatch?.[1]) {
+      items.push(bulletMatch[1]);
+      continue;
+    }
+    const numberedMatch = line.match(/^\s*\d+[.)]\s+(.+?)\s*$/);
+    if (numberedMatch?.[1]) {
+      items.push(numberedMatch[1]);
+    }
+  }
+  if (items.length > 0) return items;
 
   return [];
 }
@@ -513,9 +506,30 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+function escapeHtmlAttribute(value) {
+  return escapeHtml(value).replace(/`/g, '&#96;');
+}
+
 function formatRichText(content) {
   const escaped = escapeHtml(content);
-  return escaped
+
+  const withMarkdownLinks = escaped.replace(
+    /\[([^\]]+?)\]\((https?:\/\/[^)\s]+)\)/g,
+    (_, label, url) => {
+      const safeUrl = escapeHtmlAttribute(url);
+      return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+    }
+  );
+
+  const withBareLinks = withMarkdownLinks.replace(
+    /(https?:\/\/[^\s<]+?)([).,!?;:]?)(?=\s|$)/g,
+    (_, url, trailing) => {
+      const safeUrl = escapeHtmlAttribute(url);
+      return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${url}</a>${trailing || ''}`;
+    }
+  );
+
+  return withBareLinks
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\n/g, '<br>');
 }
@@ -549,50 +563,6 @@ async function syncHistory() {
   } finally {
     isHydrated.value = true;
     await scrollChatToBottom();
-  }
-}
-
-async function syncSuggestedPrompts() {
-  try {
-    const response = await sendRuntimeMessage({ action: 'getSuggestedPrompts' });
-    const prompts = response?.prompts;
-    if (Array.isArray(prompts) && prompts.length > 0) {
-      quickPrompts.value = prompts.slice(0, 3);
-      return;
-    }
-  } catch (error) {
-    console.error('Failed to load suggested prompts', error);
-  }
-
-  quickPrompts.value = [...defaultQuickPrompts];
-}
-
-function schedulePromptRefresh() {
-  if (promptRefreshTimeoutId) {
-    clearTimeout(promptRefreshTimeoutId);
-  }
-  promptRefreshTimeoutId = setTimeout(() => {
-    syncSuggestedPrompts().catch(() => {});
-  }, 200);
-}
-
-function handleVisibilityChange() {
-  if (document.visibilityState === 'visible') {
-    schedulePromptRefresh();
-  }
-}
-
-function handleWindowFocus() {
-  schedulePromptRefresh();
-}
-
-function handleTabActivated() {
-  schedulePromptRefresh();
-}
-
-function handleTabUpdated(tabId, changeInfo) {
-  if (changeInfo?.status === 'complete' || changeInfo?.url) {
-    schedulePromptRefresh();
   }
 }
 
@@ -868,31 +838,17 @@ watch(
 onMounted(async () => {
   chrome.runtime.onMessage.addListener(handleRuntimeMessage);
   await syncHistory();
-  await syncSuggestedPrompts();
   bindChatAutoScrollObservers();
   await scrollChatToBottom();
-
-  document.addEventListener('visibilitychange', handleVisibilityChange);
-  window.addEventListener('focus', handleWindowFocus);
-  chrome.tabs?.onActivated?.addListener(handleTabActivated);
-  chrome.tabs?.onUpdated?.addListener(handleTabUpdated);
 });
 
 onUnmounted(() => {
   chrome.runtime.onMessage.removeListener(handleRuntimeMessage);
   chatMutationObserver?.disconnect();
   chatResizeObserver?.disconnect();
-  document.removeEventListener('visibilitychange', handleVisibilityChange);
-  window.removeEventListener('focus', handleWindowFocus);
-  chrome.tabs?.onActivated?.removeListener(handleTabActivated);
-  chrome.tabs?.onUpdated?.removeListener(handleTabUpdated);
   if (errorTimeoutId) {
     clearTimeout(errorTimeoutId);
     errorTimeoutId = null;
-  }
-  if (promptRefreshTimeoutId) {
-    clearTimeout(promptRefreshTimeoutId);
-    promptRefreshTimeoutId = null;
   }
 });
 </script>

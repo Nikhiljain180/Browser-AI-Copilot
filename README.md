@@ -252,7 +252,7 @@ browser-ai-copilot/
 │   │   │   │   ├── llm/                    # LLM proxy client
 │   │   │   │   ├── core/                   # config/state/ui/tabs helpers
 │   │   │   │   ├── intents.js              # intent routing helpers
-│   │   │   │   └── suggestions.js          # dynamic starter prompts
+│   │   │   │   └── (no starter prompts)    # prompt chips removed per requirements
 │   │   │   └── tools/
 │   │   │       ├── tool-registry.js        # Tool definitions
 │   │   │       ├── sanitizer.js            # DOMPurify wrapper

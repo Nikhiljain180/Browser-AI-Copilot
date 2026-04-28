@@ -38,7 +38,7 @@ Your response MUST be valid JSON matching this schema:
   "action_input": {
     // Tool-specific parameters (e.g., {"selector": "#submit-btn"} for click_element)
   },
-  "answer": "Natural language response to user (only when action = 'final_answer')"
+  "answer": "Response to user (only when action = 'final_answer'). Can be a string OR an array of strings."
 }
 
 Guidelines:
@@ -48,9 +48,15 @@ Guidelines:
 - Request approval for destructive actions (submit, delete, buy)
 - If a tool fails, try again or use a different approach
 - For simple informational requests like summarizing, explaining, or answering questions about the current page, prefer finishing with "final_answer" as soon as you have enough context
+- When the prompt includes "Query Type: informational", you MUST respond with action: "final_answer" in the first iteration (do not call tools).
 - For extraction requests involving products, leads, rows, or table data, prefer calling "extract_data" once and then respond with "final_answer" using the extracted structured result
 - Avoid repeating the same tool call unless the page changed or the prior tool result returned an error
 - When you've completed the task, use action: "final_answer" with your response
+
+Formatting rules for final answers:
+- For page summaries, ALWAYS return "answer" as an array of short bullet strings (5–9 items).
+- Include links when relevant using markdown link syntax like: [label](https://example.com)
+- Keep each bullet scannable (generally 1 sentence).
 `;
 
 const FORM_FILL_SYSTEM_PROMPT = `You are generating a structured form fill plan for a browser copilot.
@@ -321,6 +327,8 @@ function buildConversationMessages(goal, pageContext, chatHistory = []) {
     }
   ];
 
+  const queryType = inferQueryType(goal);
+
   // Add conversation history (sliding window: last 10 messages)
   const recentHistory = chatHistory.slice(-10);
   recentHistory.forEach(msg => {
@@ -342,10 +350,52 @@ function buildConversationMessages(goal, pageContext, chatHistory = []) {
   const contextSummary = summarizePageContext(pageContext);
   messages.push({
     role: 'user',
-    content: `Current page:\n${contextSummary}\n\nGoal: ${goal}`
+    content: `Query Type: ${queryType}\n\nCurrent page:\n${contextSummary}\n\nGoal: ${goal}`
   });
 
   return messages;
+}
+
+function inferQueryType(goal) {
+  const text = String(goal || '').toLowerCase();
+
+  // Clearly action-oriented verbs/requests.
+  const actionSignals = [
+    'click',
+    'tap',
+    'press',
+    'scroll',
+    'navigate',
+    'open',
+    'go to',
+    'fill',
+    'type',
+    'enter',
+    'submit',
+    'apply',
+    'sign in',
+    'login',
+    'log in',
+    'download',
+    'upload',
+    'extract',
+    'copy',
+    'paste',
+    'select',
+    'choose',
+    'search for',
+    'find and click',
+    'book',
+    'buy',
+    'purchase',
+  ];
+
+  if (actionSignals.some(signal => text.includes(signal))) {
+    return 'action';
+  }
+
+  // Default to informational: summarize, explain, compare, recommend, Q&A about the page.
+  return 'informational';
 }
 
 function buildFormFillMessages(goal, forms = [], chatHistory = []) {
@@ -388,21 +438,84 @@ function normalizeMessageContent(content) {
 function summarizePageContext(pageContext) {
   if (!pageContext) return 'No page context available';
 
-  let summary = `
+  const getMaxContextChars = () => {
+    const explicitChars = parseInt(process.env.MAX_PAGE_CONTEXT_CHARS, 10);
+    if (Number.isFinite(explicitChars) && explicitChars > 0) return explicitChars;
+
+    const tokenBudget = parseInt(process.env.MAX_PAGE_CONTEXT_TOKENS, 10);
+    if (Number.isFinite(tokenBudget) && tokenBudget > 0) {
+      return tokenBudget * 4; // rough heuristic: ~4 chars / token
+    }
+
+    return 12000;
+  };
+
+  const clamp = (text, limit) => {
+    const normalized = String(text || '');
+    if (limit <= 0) return '';
+    if (normalized.length <= limit) return normalized;
+    return normalized.slice(0, limit);
+  };
+
+  const maxChars = getMaxContextChars();
+  const visibleTextBudget = Math.min(8000, Math.floor(maxChars * 0.6));
+  const sectionsBudget = Math.min(6000, Math.floor(maxChars * 0.35));
+  const linksBudget = Math.min(2000, Math.floor(maxChars * 0.15));
+
+  const buttonsPreview = (pageContext.buttons || [])
+    .map(button => String(button?.text || '').trim())
+    .filter(Boolean)
+    .slice(0, 12)
+    .map(text => `"${text}"`)
+    .join(', ') || 'None';
+
+  const linksPreviewRaw = (pageContext.links || [])
+    .map(link => {
+      const text = String(link?.text || '').trim().replace(/\s+/g, ' ');
+      const href = String(link?.href || '').trim();
+      if (!href) return null;
+      return text ? `${text} (${href})` : href;
+    })
+    .filter(Boolean)
+    .slice(0, 20)
+    .join('\n- ');
+  const linksPreview = clamp(linksPreviewRaw, linksBudget);
+
+  const visibleText = String(pageContext.textContent || '');
+  const visibleTextLength = pageContext.textContentLength || visibleText.length;
+
+  const sections = Array.isArray(pageContext.sections) ? pageContext.sections : [];
+  const sectionsPreviewRaw = sections
+    .slice(0, 10)
+    .map(section => {
+      const title = String(section?.title || '').trim();
+      const text = String(section?.text || '').trim();
+      if (!title || !text) return null;
+      return `## ${title}\n${text.substring(0, 1200)}`;
+    })
+    .filter(Boolean)
+    .join('\n\n');
+  const sectionsPreview = clamp(sectionsPreviewRaw, sectionsBudget);
+
+  return `
 Page: ${pageContext.title || pageContext.url}
 URL: ${pageContext.url}
 
 Key Elements:
-- Buttons: ${pageContext.buttons?.map(b => `"${b.text}"`).join(', ') || 'None'}
+- Buttons: ${buttonsPreview}
 - Forms: ${pageContext.forms?.length || 0} form(s)
 - Links: ${pageContext.links?.length || 0} link(s)
 - Tables: ${pageContext.tables?.length || 0} table(s)
 
-Visible Text (first 300 chars):
-${pageContext.textContent?.substring(0, 300) || 'No text content'}
-`;
+Links (up to 20):
+- ${linksPreview || 'None'}
 
-  return summary;
+Visible Text (first ${visibleTextBudget} chars, total ${visibleTextLength} chars):
+${clamp(visibleText, visibleTextBudget) || 'No text content'}
+
+Section Snapshots:
+${sectionsPreview || 'None'}
+`;
 }
 
 async function callLLMWithTimeout(messages, timeoutMs, options = {}) {
