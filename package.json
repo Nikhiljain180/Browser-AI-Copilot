@@ -1,0 +1,32 @@
+{
+  "name": "browser-ai-copilot",
+  "version": "1.0.0",
+  "description": "Production-grade Browser AI Copilot Chrome Extension with ReAct agent loop",
+  "private": true,
+  "workspaces": [
+    "apps/extension",
+    "apps/backend"
+  ],
+  "scripts": {
+    "install:all": "npm install && npm install --workspace=apps/extension && npm install --workspace=apps/backend",
+    "build": "npm run build --workspace=apps/extension && npm run build --workspace=apps/backend",
+    "dev": "concurrently npm:dev:backend npm:dev:extension",
+    "dev:backend": "npm run dev --workspace=apps/backend",
+    "dev:extension": "npm run dev --workspace=apps/extension",
+    "test": "npm run test --workspace=apps/backend && npm run test:unit --workspace=apps/extension",
+    "test:unit": "npm run test:unit --workspace=apps/extension && npm run test --workspace=apps/backend",
+    "test:integration": "jest --config=tests/integration/jest.config.js",
+    "test:e2e": "playwright test",
+    "lint": "eslint apps/ --ext .js,.vue,.ts",
+    "format": "prettier --write \"apps/**/*.{js,vue,ts,json,md}\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0",
+    "eslint": "^8.56.0",
+    "jsdom": "^29.1.0",
+    "prettier": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

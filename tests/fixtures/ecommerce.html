@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>E2E Test Fixture - Product Listing</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        h1 { color: #333; margin-bottom: 20px; }
+        
+        .product-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .product-table th,
+        .product-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .product-table th {
+            background: #667eea;
+            color: white;
+            font-weight: 600;
+        }
+        
+        .product-table tr:hover {
+            background: #f9f9f9;
+        }
+        
+        .product-table a {
+            color: #667eea;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        
+        .product-table a:hover {
+            text-decoration: underline;
+        }
+        
+        .price {
+            font-weight: 600;
+            color: #27ae60;
+        }
+        
+        .form-section {
+            background: white;
+            padding: 20px;
+            margin-top: 20px;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        input[type="text"],
+        input[type="email"],
+        textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: Arial, sans-serif;
+        }
+        
+        input[type="text"]:focus,
+        input[type="email"]:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        button {
+            padding: 10px 20px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        
+        button:hover {
+            background: #5568d3;
+        }
+        
+        button[data-action="submit"] {
+            background: #27ae60;
+        }
+        
+        button[data-action="submit"]:hover {
+            background: #229954;
+        }
+        
+        .message-content {
+            background: #f0f0f0;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📦 E2E Test Fixture - E-Commerce Page</h1>
+        
+        <table class="product-table">
+            <thead>
+                <tr>
+                    <th>Product</th>
+                    <th>Category</th>
+                    <th>Price</th>
+                    <th>Stock</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><a href="#product-1">Premium Wireless Headphones</a></td>
+                    <td>Electronics</td>
+                    <td class="price">$299.99</td>
+                    <td>15</td>
+                    <td><button data-product-id="1">View Details</button></td>
+                </tr>
+                <tr>
+                    <td><a href="#product-2">USB-C Cable (3ft)</a></td>
+                    <td>Accessories</td>
+                    <td class="price">$12.99</td>
+                    <td>42</td>
+                    <td><button data-product-id="2">View Details</button></td>
+                </tr>
+                <tr>
+                    <td><a href="#product-3">Smartphone Case</a></td>
+                    <td>Accessories</td>
+                    <td class="price">$24.99</td>
+                    <td>28</td>
+                    <td><button data-product-id="3">View Details</button></td>
+                </tr>
+                <tr>
+                    <td><a href="#product-4">4K Monitor</a></td>
+                    <td>Electronics</td>
+                    <td class="price">$599.99</td>
+                    <td>5</td>
+                    <td><button data-product-id="4">View Details</button></td>
+                </tr>
+                <tr>
+                    <td><a href="#product-5">Mechanical Keyboard</a></td>
+                    <td>Peripherals</td>
+                    <td class="price">$149.99</td>
+                    <td>22</td>
+                    <td><button data-product-id="5">View Details</button></td>
+                </tr>
+            </tbody>
+        </table>
+        
+        <div class="form-section">
+            <h2>Contact Us</h2>
+            <form id="contact-form">
+                <div class="form-group">
+                    <label for="name">Name</label>
+                    <input type="text" id="name" name="name" placeholder="Your name">
+                </div>
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" placeholder="your@email.com">
+                </div>
+                <div class="form-group">
+                    <label for="message">Message</label>
+                    <textarea id="message" name="message" placeholder="Your message..." rows="4"></textarea>
+                </div>
+                <button type="submit" data-action="submit">📤 Submit Form</button>
+            </form>
+        </div>
+        
+        <div class="message-content">
+            <h3>💬 Recent Customer Review</h3>
+            <p>"Great products and fast shipping! Highly recommend this store. The customer service team was very helpful when I had questions."</p>
+            <textarea id="reply-field" placeholder="Type your reply here..." style="margin-top: 10px;"></textarea>
+            <button style="margin-top: 10px;" id="reply-button">📝 Post Reply</button>
+        </div>
+    </div>
+    
+    <script>
+        // E2E test helper events
+        document.addEventListener('click', (e) => {
+            if (e.target.dataset.productId) {
+                console.log('Product clicked:', e.target.dataset.productId);
+            }
+        });
+        
+        document.getElementById('contact-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            alert('Form would submit with:\n' + 
+                  'Name: ' + document.getElementById('name').value + '\n' +
+                  'Email: ' + document.getElementById('email').value);
+        });
+    </script>
+</body>
+</html>

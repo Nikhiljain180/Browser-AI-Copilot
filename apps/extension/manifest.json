@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "Browser AI Copilot",
+  "version": "1.0.0",
+  "description": "Production-grade AI Agent for autonomous browser interactions with human-in-the-loop safety gates",
+  "permissions": [
+    "activeTab",
+    "tabs",
+    "scripting",
+    "storage",
+    "sidePanel"
+  ],
+  "action": {
+    "default_title": "Browser AI Copilot"
+  },
+  "side_panel": {
+    "default_path": "public/popup.html"
+  },
+  "background": {
+    "service_worker": "src/background/service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/content-script.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "icons": {
+    "16": "public/icon-16.png",
+    "48": "public/icon-48.png",
+    "128": "public/icon-128.png"
+  },
+  "host_permissions": ["<all_urls>"]
+}

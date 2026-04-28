@@ -1,0 +1,26 @@
+{
+  "name": "browser-ai-copilot-backend",
+  "version": "1.0.0",
+  "description": "Node.js Express proxy server for LLM API gateway",
+  "main": "server.js",
+  "scripts": {
+    "build": "node -e \"console.log('Backend build step not required')\"",
+    "dev": "nodemon server.js",
+    "start": "node server.js",
+    "test": "jest --config ./jest.config.js",
+    "test:integration": "jest --config ./jest.config.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "openai": "^4.31.0",
+    "@anthropic-ai/sdk": "^0.19.0",
+    "dotenv": "^16.3.1",
+    "cors": "^2.8.5",
+    "morgan": "^1.10.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1",
+    "jest": "^29.7.0",
+    "supertest": "^6.3.3"
+  }
+}
