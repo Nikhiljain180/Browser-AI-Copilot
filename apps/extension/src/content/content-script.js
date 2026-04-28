@@ -1,9 +1,146 @@
 /**
  * Content Script - DOM Perception & Action Execution
  * Extracts Accessibility Tree and executes browser actions
+ * Includes sanitization to prevent prompt injection attacks
  */
 
 const pageElementRegistry = new Map();
+
+// Sanitizer utility (loaded from sanitizer.js if available, fallback to inline basic sanitization)
+const ContentSanitizer = {
+  sanitizeText: (text) => {
+    if (!text) return '';
+    // If DOMPurify is available globally, use it; otherwise use fallback
+    if (typeof DOMPurify !== 'undefined') {
+      return DOMPurify.sanitize(String(text), { ALLOWED_TAGS: [] });
+    }
+    // Fallback: escape dangerous characters
+    return String(text)
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#x27;')
+      .replace(/\//g, '&#x2F;');
+  },
+  sanitizeHTML: (html) => {
+    if (!html) return '';
+    if (typeof DOMPurify !== 'undefined') {
+      return DOMPurify.sanitize(html, {
+        ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'p', 'br', 'div', 'span', 'a', 'ul', 'ol', 'li'],
+        ALLOWED_ATTR: ['href', 'target', 'rel']
+      });
+    }
+    // Fallback: strip script/style tags
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+    tempDiv.querySelectorAll('script, style, iframe').forEach(el => el.remove());
+    return tempDiv.innerHTML;
+  }
+};
+
+// ============================================
+// Token Budget Management
+// ============================================
+
+/**
+ * Estimate token count (rough: 1 token ≈ 4 characters)
+ */
+function estimateTokens(text) {
+  return Math.ceil((String(text || '').length) / 4);
+}
+
+/**
+ * Apply token budget constraints to page context
+ * Prioritizes: visible elements > buttons > links > text > sections
+ * Max budget: 3000 tokens (configurable via MAX_PAGE_CONTEXT_TOKENS env)
+ */
+function applyTokenBudget(tree) {
+  const maxTokens = window.__MAX_PAGE_CONTEXT_TOKENS__ || 3000;
+  let currentTokens = 0;
+
+  // Estimate baseline (metadata)
+  currentTokens += estimateTokens(tree.url);
+  currentTokens += estimateTokens(tree.title);
+
+  const budgets = {
+    buttons: Math.floor(maxTokens * 0.1),    // 10% for buttons
+    links: Math.floor(maxTokens * 0.15),     // 15% for links
+    elements: Math.floor(maxTokens * 0.2),   // 20% for interactive elements
+    text: Math.floor(maxTokens * 0.4),       // 40% for visible text
+    sections: Math.floor(maxTokens * 0.15)   // 15% for sections
+  };
+
+  // Limit buttons (keep visible first)
+  tree.buttons = tree.buttons
+    .sort((a, b) => (b.visible ? 1 : -1) - (a.visible ? 1 : -1))
+    .filter(btn => {
+      const tokens = estimateTokens(btn.text);
+      if (currentTokens + tokens <= maxTokens) {
+        currentTokens += tokens;
+        return true;
+      }
+      return false;
+    });
+
+  // Limit links
+  tree.links = tree.links
+    .filter(link => {
+      const tokens = estimateTokens(link.text + link.href);
+      if (currentTokens + tokens <= budgets.links) {
+        currentTokens += tokens;
+        return true;
+      }
+      return false;
+    });
+    if (tree.links.length > 20) {
+      tree.links = tree.links.slice(0, 20);
+      tree._linksExceeded = true;
+    }
+
+  // Limit elements (keep visible first)
+  tree.elements = tree.elements
+    .sort((a, b) => (b.visible ? 1 : -1) - (a.visible ? 1 : -1))
+    .filter(el => {
+      const tokens = estimateTokens(el.text);
+      if (currentTokens + tokens <= budgets.elements) {
+        currentTokens += tokens;
+        return true;
+      }
+      return false;
+    });
+
+  // Limit text content
+  const textTokens = estimateTokens(tree.textContent);
+  if (textTokens > budgets.text) {
+    const maxChars = budgets.text * 4; // Reverse estimate
+    tree.textContent = tree.textContent.substring(0, maxChars) + '\n[... text truncated for token budget]';
+    tree._textTruncated = true;
+  }
+  currentTokens += estimateTokens(tree.textContent);
+
+  // Limit sections
+  tree.sections = tree.sections.filter(section => {
+    const tokens = estimateTokens(section.title + section.text);
+    if (currentTokens + tokens <= budgets.sections) {
+      currentTokens += tokens;
+      return true;
+    }
+    return false;
+  });
+  if (tree.sections.length > 8) {
+    tree.sections = tree.sections.slice(0, 8);
+    tree._sectionsExceeded = true;
+  }
+
+  // Store budget info for debugging
+  tree._tokenInfo = {
+    estimated: currentTokens,
+    maxBudget: maxTokens,
+    exceeded: currentTokens > maxTokens
+  };
+
+  return tree;
+}
 
 // ============================================
 // Message Listener
@@ -63,7 +200,10 @@ function extractAccessibilityTree(focusArea = null) {
   // Set up MutationObserver for dynamic content
   observeDOMChanges();
 
-  return tree;
+  // Apply token budget constraints to keep LLM context window manageable
+  const budgetedTree = applyTokenBudget(tree);
+
+  return budgetedTree;
 }
 
 function extractInteractiveElements(tree, focusArea) {
@@ -85,10 +225,10 @@ function extractInteractiveElements(tree, focusArea) {
       agentId: registerElement(`element_${idx}`, el),
       tagName: el.tagName.toLowerCase(),
       type: el.type || el.getAttribute('role'),
-      text: el.innerText || el.value || el.placeholder || el.getAttribute('aria-label') || '',
+      text: ContentSanitizer.sanitizeText(el.innerText || el.value || el.placeholder || el.getAttribute('aria-label') || ''),
       selector: generateSelector(el),
       visible: isVisible,
-      ariaLabel: el.getAttribute('aria-label'),
+      ariaLabel: ContentSanitizer.sanitizeText(el.getAttribute('aria-label') || ''),
       ariaDescribedBy: el.getAttribute('aria-describedby'),
       disabled: el.disabled,
       position: {
@@ -271,7 +411,7 @@ function extractLinks(tree) {
   document.querySelectorAll('a[href]').forEach((link, idx) => {
     tree.links.push({
       agentId: registerElement(`link_${idx}`, link),
-      text: link.innerText,
+      text: ContentSanitizer.sanitizeText(link.innerText),
       href: link.href,
       selector: generateSelector(link)
     });
@@ -283,7 +423,7 @@ function extractTextContent(tree) {
   const rawText = String(mainContent?.innerText || '').trim();
 
   tree.textContentLength = rawText.length;
-  tree.textContent = rawText.substring(0, 12000);
+  tree.textContent = ContentSanitizer.sanitizeText(rawText.substring(0, 12000));
   tree.sections = extractSectionSummaries(mainContent);
 }
 
