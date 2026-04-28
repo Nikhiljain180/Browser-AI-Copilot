@@ -51,6 +51,16 @@ Guidelines:
 - For extraction requests involving products, leads, rows, or table data, prefer calling "extract_data" once and then respond with "final_answer" using the extracted structured result
 - Avoid repeating the same tool call unless the page changed or the prior tool result returned an error
 - When you've completed the task, use action: "final_answer" with your response
+
+Dual-Mode Optimization:
+If the user's question can be answered from the page context already provided, respond immediately with final_answer. Only use tools when you need to interact with the page or need updated/more specific page data.
+
+Response Formatting:
+- Use bullet points (•) for lists and key information
+- Use **bold** for important terms and company names
+- Use proper paragraph breaks for readability
+- Include relevant links when available in the page context
+- Structure responses with clear headings when appropriate
 `;
 
 const FORM_FILL_SYSTEM_PROMPT = `You are generating a structured form fill plan for a browser copilot.
@@ -167,7 +177,7 @@ function initializeLLM(provider = getLLMProvider()) {
 
 /**
  * POST /api/llm/stream
- * Main LLM endpoint for agent thinking
+ * Main LLM endpoint for agent thinking with true streaming
  */
 app.post('/api/llm/stream', async (req, res) => {
   try {
@@ -180,28 +190,35 @@ app.post('/api/llm/stream', async (req, res) => {
       return res.status(400).json({ error: 'goal is required' });
     }
 
+    // Set SSE headers for streaming
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Cache-Control'
+    });
+
     // Build conversation context
     const messages = buildConversationMessages(goal, pageContext, chatHistory);
 
-    console.log(`[LLM] Provider: ${provider}, Model: ${model}`);
-    console.log(`[LLM] Goal: ${goal.substring(0, 50)}...`);
+    console.log(`[LLM Stream] Provider: ${provider}, Model: ${model}`);
+    console.log(`[LLM Stream] Goal: ${goal.substring(0, 50)}...`);
 
-    const response = await callLLMWithTimeout(messages, timeout);
-
-    return res.json({
-      success: true,
-      content: response,
-      provider,
-      model,
-      timestamp: Date.now()
-    });
+    await streamLLMResponse(messages, timeout, res);
 
   } catch (error) {
-    console.error('[LLM Error]', error.message);
-    return res.status(500).json({
-      error: error.message,
-      timestamp: Date.now()
-    });
+    console.error('[LLM Stream Error]', error.message);
+    if (!res.headersSent) {
+      return res.status(500).json({
+        error: error.message,
+        timestamp: Date.now()
+      });
+    } else {
+      // Send error as SSE event if headers already sent
+      res.write(`event: error\ndata: ${JSON.stringify({ error: error.message, timestamp: Date.now() })}\n\n`);
+      res.end();
+    }
   }
 });
 
@@ -262,6 +279,57 @@ app.post('/api/forms/plan', async (req, res) => {
     });
   } catch (error) {
     console.error('[Form Plan Error]', error.message);
+    return res.status(500).json({
+      error: error.message,
+      timestamp: Date.now()
+    });
+  }
+});
+
+/**
+ * POST /api/draft-reply
+ * Generate a professional reply for draft_reply tool
+ */
+app.post('/api/draft-reply', async (req, res) => {
+  try {
+    const { context, tone = 'professional', pageContext } = req.body;
+    const timeout = getLLMTimeout();
+
+    if (!context) {
+      return res.status(400).json({ error: 'context is required' });
+    }
+
+    const draftPrompt = `Generate a professional reply based on the following context. The reply should be:
+- ${tone} in tone
+- Concise and natural
+- Suitable for the context provided
+- Ready to be sent as-is
+
+Context: ${context}
+
+Page context for reference: ${JSON.stringify(pageContext || {}).slice(0, 500)}...
+
+Generate only the reply text, no explanations or formatting.`;
+
+    const messages = [
+      { role: 'system', content: 'You are a helpful assistant that generates professional replies. Always respond with only the reply text, no additional commentary.' },
+      { role: 'user', content: draftPrompt }
+    ];
+
+    const response = await callLLMWithTimeout(messages, timeout, {
+      temperature: 0.7,
+      max_tokens: 300
+    });
+
+    return res.json({
+      success: true,
+      reply: response.trim(),
+      tone,
+      timestamp: Date.now()
+    });
+
+  } catch (error) {
+    console.error('[Draft Reply Error]', error.message);
     return res.status(500).json({
       error: error.message,
       timestamp: Date.now()
@@ -388,21 +456,124 @@ function normalizeMessageContent(content) {
 function summarizePageContext(pageContext) {
   if (!pageContext) return 'No page context available';
 
+  const topLinks = (Array.isArray(pageContext.links) ? pageContext.links : [])
+    .map(link => ({
+      text: String(link?.text || '').trim(),
+      href: String(link?.href || '').trim()
+    }))
+    .filter(link => link.text && link.href)
+    .slice(0, 15);
+
+  const topButtons = (Array.isArray(pageContext.buttons) ? pageContext.buttons : [])
+    .map(button => String(button?.text || '').trim())
+    .filter(Boolean)
+    .slice(0, 12);
+
   let summary = `
 Page: ${pageContext.title || pageContext.url}
 URL: ${pageContext.url}
 
 Key Elements:
-- Buttons: ${pageContext.buttons?.map(b => `"${b.text}"`).join(', ') || 'None'}
+- Buttons: ${topButtons.length > 0 ? topButtons.map(text => `"${text}"`).join(', ') : 'None'}
 - Forms: ${pageContext.forms?.length || 0} form(s)
 - Links: ${pageContext.links?.length || 0} link(s)
 - Tables: ${pageContext.tables?.length || 0} table(s)
+- Link samples: ${topLinks.length > 0 ? topLinks.map(link => `${link.text} (${link.href})`).join(' | ') : 'None'}
 
-Visible Text (first 300 chars):
-${pageContext.textContent?.substring(0, 300) || 'No text content'}
+Visible Text (first 3000 chars):
+${pageContext.textContent?.substring(0, 3000) || 'No text content'}
 `;
 
   return summary;
+}
+
+async function streamLLMResponse(messages, timeoutMs, res) {
+  const provider = getLLMProvider();
+  const model = getLLMModel();
+  if (!llmClient) {
+    initializeLLM(provider);
+  }
+
+  let accumulatedContent = '';
+  let chunkCount = 0;
+
+  try {
+    if (provider === 'openai') {
+      const stream = await llmClient.chat.completions.create({
+        model,
+        messages: messages.map(m => ({
+          role: m.role,
+          content: m.content
+        })),
+        temperature: 0.7,
+        max_tokens: 1000,
+        stream: true
+      });
+
+      for await (const chunk of stream) {
+        const content = chunk.choices[0]?.delta?.content || '';
+        if (content) {
+          accumulatedContent += content;
+          chunkCount++;
+          
+          // Send chunk as SSE event
+          res.write(`event: chunk\ndata: ${JSON.stringify({ 
+            content, 
+            accumulated: accumulatedContent,
+            chunkIndex: chunkCount,
+            provider,
+            model
+          })}\n\n`);
+        }
+      }
+    } else if (provider === 'anthropic') {
+      const stream = await llmClient.messages.create({
+        model,
+        max_tokens: 1000,
+        system: messages[0].content,
+        messages: messages.slice(1).map(m => ({
+          role: m.role,
+          content: m.content
+        })),
+        stream: true
+      });
+
+      for await (const chunk of stream) {
+        if (chunk.type === 'content_block_delta' && chunk.delta.text) {
+          const content = chunk.delta.text;
+          accumulatedContent += content;
+          chunkCount++;
+          
+          // Send chunk as SSE event
+          res.write(`event: chunk\ndata: ${JSON.stringify({ 
+            content, 
+            accumulated: accumulatedContent,
+            chunkIndex: chunkCount,
+            provider,
+            model
+          })}\n\n`);
+        }
+      }
+    }
+
+    // Send final completion event
+    res.write(`event: complete\ndata: ${JSON.stringify({ 
+      content: accumulatedContent,
+      totalChunks: chunkCount,
+      provider,
+      model,
+      timestamp: Date.now()
+    })}\n\n`);
+
+  } catch (error) {
+    console.error('[Streaming Error]', error);
+    res.write(`event: error\ndata: ${JSON.stringify({ 
+      error: error.message,
+      timestamp: Date.now()
+    })}\n\n`);
+  } finally {
+    res.end();
+  }
 }
 
 async function callLLMWithTimeout(messages, timeoutMs, options = {}) {

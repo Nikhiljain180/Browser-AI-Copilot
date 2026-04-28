@@ -1,6 +1,6 @@
-/* global CopilotSw, chrome */
+/* global chrome */
 
-class AgentState {
+export class AgentState {
   constructor() {
     this.chatHistory = [];
     this.currentGoal = null;
@@ -38,8 +38,10 @@ class AgentState {
   }
 }
 
-CopilotSw.AgentState = AgentState;
-CopilotSw.agentState = new AgentState();
+export const agentState = new AgentState();
 
-CopilotSw.activeLLMController = null;
+export let activeLLMController = null;
 
+export function setActiveLLMController(controller) {
+  activeLLMController = controller;
+}

@@ -60,12 +60,12 @@
         <div class="prompt-chips">
           <button
             v-for="prompt in quickPrompts"
-            :key="prompt"
+            :key="getPromptText(prompt)"
             class="prompt-chip"
             type="button"
             @click="prefillPrompt(prompt)"
           >
-            {{ prompt }}
+            {{ getPromptText(prompt) }}
           </button>
         </div>
       </div>
@@ -86,6 +86,15 @@
                 {{ message.role === 'user' ? 'You' : 'Copilot' }}
               </span>
               <span>{{ formatTime(message.timestamp) }}</span>
+            </div>
+            <div v-if="message.role === 'assistant' && getToolsUsed(message).length" class="tool-badges">
+              <span
+                v-for="(toolName, toolIndex) in getToolsUsed(message)"
+                :key="`${index}-tool-${toolIndex}-${toolName}`"
+                class="tool-badge"
+              >
+                🔧 {{ toolName }}
+              </span>
             </div>
 
             <template v-if="getStructuredTable(message.content)">
@@ -124,7 +133,7 @@
                 </li>
               </ul>
             </template>
-            <p v-else class="message-content" v-html="formatRichText(message.content)" />
+            <div v-else class="message-content rich-text" v-html="formatRichText(message.content)" />
           </div>
         </article>
       </template>
@@ -173,7 +182,11 @@
 
         <div class="composer-actions">
           <span class="composer-hint">
-            {{ isRunning ? 'Agent is working. You can stop it any time.' : 'Enter to send, Ctrl/Cmd+Enter also works.' }}
+            {{
+              isRunning
+                ? 'Agent is working. You can stop it any time.'
+                : 'Enter to send, Ctrl/Cmd+Enter also works.'
+            }}
           </span>
 
           <button
@@ -270,16 +283,11 @@ const liveThoughtLines = ref([]);
 const lastPrompt = ref('');
 let errorTimeoutId = null;
 let liveThoughtId = 0;
+let thoughtUpdateTimeout = null;
 let chatMutationObserver = null;
 let chatResizeObserver = null;
-let promptRefreshTimeoutId = null;
 
-const defaultQuickPrompts = [
-  'Summarize this page in 5 bullets',
-  'Find the main CTA and explain it',
-  'Draft a reply based on this page',
-];
-const quickPrompts = ref([...defaultQuickPrompts]);
+const quickPrompts = ref([]);
 
 const visibleMessages = computed(() => {
   return messages.value.filter(message => message.role !== 'tool');
@@ -411,8 +419,24 @@ function formatTime(timestamp) {
   });
 }
 
+function getToolsUsed(message) {
+  if (!message || message.role !== 'assistant') return [];
+  if (!Array.isArray(message.toolsUsed)) return [];
+  return message.toolsUsed
+    .map(toolName => String(toolName || '').trim())
+    .filter(Boolean);
+}
+
+function getPromptText(prompt) {
+  if (typeof prompt === 'string') return prompt;
+  if (prompt && typeof prompt === 'object') return String(prompt.text || '').trim();
+  return '';
+}
+
 async function prefillPrompt(prompt) {
-  draft.value = prompt;
+  const text = getPromptText(prompt);
+  if (!text) return;
+  draft.value = text;
   await submitPrompt();
 }
 
@@ -515,9 +539,25 @@ function escapeHtml(value) {
 
 function formatRichText(content) {
   const escaped = escapeHtml(content);
-  return escaped
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\n/g, '<br>');
+
+  const linkedMarkdown = escaped.replace(
+    /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+    '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'
+  );
+
+  const linkedText = linkedMarkdown.replace(
+    /(^|[\s>])(https?:\/\/[^\s<]+)/g,
+    '$1<a href="$2" target="_blank" rel="noopener noreferrer">$2</a>'
+  );
+
+  const withStrong = linkedText.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  const withHeadings = withStrong
+    .replace(/^###\s+(.+)$/gm, '<strong>$1</strong>')
+    .replace(/^##\s+(.+)$/gm, '<strong>$1</strong>');
+
+  return withHeadings
+    .replace(/\n/g, '<br>')
+    .replace(/<br>\s*[-*]\s+/g, '<br>• ');
 }
 
 async function syncHistory() {
@@ -552,50 +592,6 @@ async function syncHistory() {
   }
 }
 
-async function syncSuggestedPrompts() {
-  try {
-    const response = await sendRuntimeMessage({ action: 'getSuggestedPrompts' });
-    const prompts = response?.prompts;
-    if (Array.isArray(prompts) && prompts.length > 0) {
-      quickPrompts.value = prompts.slice(0, 3);
-      return;
-    }
-  } catch (error) {
-    console.error('Failed to load suggested prompts', error);
-  }
-
-  quickPrompts.value = [...defaultQuickPrompts];
-}
-
-function schedulePromptRefresh() {
-  if (promptRefreshTimeoutId) {
-    clearTimeout(promptRefreshTimeoutId);
-  }
-  promptRefreshTimeoutId = setTimeout(() => {
-    syncSuggestedPrompts().catch(() => {});
-  }, 200);
-}
-
-function handleVisibilityChange() {
-  if (document.visibilityState === 'visible') {
-    schedulePromptRefresh();
-  }
-}
-
-function handleWindowFocus() {
-  schedulePromptRefresh();
-}
-
-function handleTabActivated() {
-  schedulePromptRefresh();
-}
-
-function handleTabUpdated(tabId, changeInfo) {
-  if (changeInfo?.status === 'complete' || changeInfo?.url) {
-    schedulePromptRefresh();
-  }
-}
-
 function applyStatusUpdate(status) {
   if (!status) return;
   if (status.phase) phase.value = status.phase;
@@ -603,15 +599,23 @@ function applyStatusUpdate(status) {
   if (typeof status.isRunning === 'boolean') isRunning.value = status.isRunning;
 }
 
-function pushLiveThought(text) {
+function updateLiveThought(text) {
   const normalized = String(text || '').trim();
   if (!normalized) return;
 
   const previous = liveThoughtLines.value[0];
   if (previous?.text === normalized) return;
 
-  const entry = { id: ++liveThoughtId, text: normalized };
-  liveThoughtLines.value = [entry];
+  // Clear existing timeout
+  if (thoughtUpdateTimeout) {
+    clearTimeout(thoughtUpdateTimeout);
+  }
+
+  // Debounce the update to reduce jerk/jitter and layout shifting
+  thoughtUpdateTimeout = setTimeout(() => {
+    const entry = { id: ++liveThoughtId, text: normalized };
+    liveThoughtLines.value = [entry];
+  }, 300); // 300ms debounce for more stable updates
 }
 
 function resetLiveThoughts() {
@@ -693,7 +697,7 @@ async function submitPrompt() {
   phase.value = 'reading';
   phaseDetail.value = 'Collecting the current page context before asking the model.';
   resetLiveThoughts();
-  pushLiveThought('Opening the current page and collecting visible context');
+  updateLiveThought('Opening the current page and collecting visible context');
 
   messages.value.push({
     role: 'user',
@@ -705,7 +709,7 @@ async function submitPrompt() {
   try {
     const response = await sendRuntimeMessage({
       action: 'startAgent',
-      goal,
+      goal
     });
 
     if (response?.error) {
@@ -795,11 +799,6 @@ async function rejectApproval() {
 }
 
 function handleRuntimeMessage(message) {
-  if (message.action === 'pageContextChanged') {
-    schedulePromptRefresh();
-    return;
-  }
-
   if (message.action === 'updateReasoning') {
     currentThought.value = message.thought || '';
     currentAction.value = message.actionName || message.action || '';
@@ -808,8 +807,8 @@ function handleRuntimeMessage(message) {
     phaseDetail.value = currentAction.value
       ? `Planning: ${currentAction.value}`
       : 'Reasoning about the next step.';
-    pushLiveThought(polishedStage.value);
-    pushLiveThought(polishedAction.value);
+    updateLiveThought(polishedStage.value);
+    updateLiveThought(polishedAction.value);
     return;
   }
 
@@ -826,16 +825,16 @@ function handleRuntimeMessage(message) {
     };
     phase.value = 'acting';
     phaseDetail.value = 'Waiting for your approval to continue.';
-    pushLiveThought('Waiting for approval before continuing');
+    updateLiveThought('Waiting for approval before continuing');
     return;
   }
 
   if (message.action === 'updateStatus') {
     applyStatusUpdate(message);
-    if (message.phase === 'reading') pushLiveThought('Scanning the current page');
-    if (message.phase === 'thinking') pushLiveThought('Understanding the request');
-    if (message.phase === 'acting') pushLiveThought(polishedAction.value);
-    if (message.phase === 'finalizing') pushLiveThought('Composing the response');
+    if (message.phase === 'reading') updateLiveThought('Scanning the current page');
+    if (message.phase === 'thinking') updateLiveThought('Understanding the request');
+    if (message.phase === 'acting') updateLiveThought(polishedAction.value);
+    if (message.phase === 'finalizing') updateLiveThought('Composing the response');
   }
 }
 
@@ -868,31 +867,73 @@ watch(
 onMounted(async () => {
   chrome.runtime.onMessage.addListener(handleRuntimeMessage);
   await syncHistory();
-  await syncSuggestedPrompts();
   bindChatAutoScrollObservers();
   await scrollChatToBottom();
-
-  document.addEventListener('visibilitychange', handleVisibilityChange);
-  window.addEventListener('focus', handleWindowFocus);
-  chrome.tabs?.onActivated?.addListener(handleTabActivated);
-  chrome.tabs?.onUpdated?.addListener(handleTabUpdated);
 });
 
 onUnmounted(() => {
   chrome.runtime.onMessage.removeListener(handleRuntimeMessage);
   chatMutationObserver?.disconnect();
   chatResizeObserver?.disconnect();
-  document.removeEventListener('visibilitychange', handleVisibilityChange);
-  window.removeEventListener('focus', handleWindowFocus);
-  chrome.tabs?.onActivated?.removeListener(handleTabActivated);
-  chrome.tabs?.onUpdated?.removeListener(handleTabUpdated);
   if (errorTimeoutId) {
     clearTimeout(errorTimeoutId);
     errorTimeoutId = null;
   }
-  if (promptRefreshTimeoutId) {
-    clearTimeout(promptRefreshTimeoutId);
-    promptRefreshTimeoutId = null;
-  }
 });
 </script>
+
+<style scoped>
+.thought-stream {
+  min-height: 80px;
+  max-height: 120px;
+  overflow: hidden;
+  transition: none;
+  position: relative;
+}
+
+.thought-line {
+  margin-bottom: 2px;
+  opacity: 1;
+  transition: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+}
+
+.thought-stream-enter-active,
+.thought-stream-leave-active {
+  transition: none;
+}
+
+.thought-stream-enter-from {
+  opacity: 0;
+}
+
+.thought-stream-leave-to {
+  opacity: 0;
+}
+
+.chat-feed {
+  scroll-behavior: auto;
+}
+
+.message-row {
+  transition: none;
+}
+
+.typing-indicator span {
+  animation: pulse 1.4s infinite ease-in-out both;
+}
+
+@keyframes pulse {
+  0%, 80%, 100% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+</style>

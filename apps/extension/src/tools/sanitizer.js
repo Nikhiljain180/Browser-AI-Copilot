@@ -3,7 +3,8 @@
  * Sanitizes all extracted DOM content
  */
 
-// Simple sanitization for extracted content (DOMPurify would be installed in real app)
+import DOMPurify from 'dompurify';
+
 class ContentSanitizer {
   /**
    * Sanitize text content to prevent prompt injection
@@ -20,19 +21,16 @@ class ContentSanitizer {
   }
 
   /**
-   * Sanitize extracted HTML
+   * Sanitize extracted HTML using DOMPurify
    */
   static sanitizeHTML(html) {
-    // In production, use DOMPurify library
-    // For now, strip dangerous elements
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = html;
-
-    // Remove script, style, iframe tags
-    const dangerous = tempDiv.querySelectorAll('script, style, iframe, object, embed');
-    dangerous.forEach(el => el.remove());
-
-    return tempDiv.innerHTML;
+    if (!html) return '';
+    
+    return DOMPurify.sanitize(html, {
+      FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed'],
+      FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur'],
+      ALLOW_DATA_ATTR: false
+    });
   }
 
   /**

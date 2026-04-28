@@ -5,10 +5,9 @@
   "description": "Production-grade AI Agent for autonomous browser interactions with human-in-the-loop safety gates",
   "permissions": [
     "activeTab",
-    "tabs",
-    "scripting",
     "storage",
-    "sidePanel"
+    "sidePanel",
+    "scripting"
   ],
   "action": {
     "default_title": "Browser AI Copilot"
@@ -17,7 +16,8 @@
     "default_path": "public/popup.html"
   },
   "background": {
-    "service_worker": "src/background/service-worker.js"
+    "service_worker": "public/dist/service-worker.js",
+    "type": "module"
   },
   "content_scripts": [
     {
@@ -30,6 +30,5 @@
     "16": "public/icon-16.png",
     "48": "public/icon-48.png",
     "128": "public/icon-128.png"
-  },
-  "host_permissions": ["<all_urls>"]
+  }
 }

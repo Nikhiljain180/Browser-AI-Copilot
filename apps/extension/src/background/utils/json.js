@@ -1,6 +1,4 @@
-/* global CopilotSw */
-
-CopilotSw.parseJsonResponse = function parseJsonResponse(content) {
+export function parseJsonResponse(content) {
   try {
     return JSON.parse(content);
   } catch {
@@ -12,5 +10,4 @@ CopilotSw.parseJsonResponse = function parseJsonResponse(content) {
       return null;
     }
   }
-};
-
+}

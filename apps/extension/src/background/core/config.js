@@ -1,9 +1,7 @@
-/* global CopilotSw */
-CopilotSw.CONFIG = {
+export const CONFIG = {
   BACKEND_URL: 'http://localhost:3000',
   MAX_REACT_ITERATIONS: 10,
   LLM_TIMEOUT_MS: 30000,
   TOOL_TIMEOUT_MS: 30000,
   MAX_PAGE_CONTEXT_TOKENS: 3000,
 };
-

@@ -1,15 +1,16 @@
-/* global CopilotSw, chrome */
+/* global chrome */
 
-CopilotSw.broadcastUI = function broadcastUI(message) {
+import { agentState } from './state.js';
+
+export function broadcastUI(message) {
   chrome.runtime.sendMessage(message).catch(() => {});
-};
+}
 
-CopilotSw.updateAgentStatus = function updateAgentStatus(phase, detail, isRunning = CopilotSw.agentState.isRunning) {
-  CopilotSw.broadcastUI({
+export function updateAgentStatus(phase, detail, isRunning = agentState.isRunning) {
+  broadcastUI({
     action: 'updateStatus',
     phase,
     detail,
     isRunning,
   });
-};
-
+}

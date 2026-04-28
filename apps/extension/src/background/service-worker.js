@@ -1,29 +1,18 @@
-/**
- * Service Worker - Entry Point
- * Wires UI messages to modularized agent logic loaded via importScripts().
- */
-
-/* global chrome, CopilotSw */
-
-importScripts(
-  './sw-namespace.js',
-  './core/config.js',
-  './core/state.js',
-  './core/ui.js',
-  './core/tabs.js',
-  './utils/json.js',
-  './intents.js',
-  './tools/approvals.js',
-  './tools/tool-executor.js',
-  './workflows/form-workflow.js',
-  './llm/llm.js',
-  './suggestions.js',
-  './agent/agent-runner.js',
-);
+import { CONFIG } from './core/config.js';
+import { agentState, activeLLMController, setActiveLLMController } from './core/state.js';
+import { updateAgentStatus } from './core/ui.js';
+import { handleStartAgent, clearAgentSession } from './agent/agent-runner.js';
+import { executeToolWithApproval } from './tools/tool-executor.js';
+import {
+  approvalPromises,
+  pendingApprovals,
+  handleApproveAction,
+  handleRejectAction
+} from './tools/approvals.js';
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'startAgent') {
-    CopilotSw.handleStartAgent(request.goal).then(sendResponse).catch(err => {
+    handleStartAgent(request.goal, { executeToolWithApproval, options: request.options || {} }).then(sendResponse).catch(err => {
       console.error('Agent error:', err);
       sendResponse({ error: err.message });
     });
@@ -31,52 +20,52 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.action === 'stopAgent') {
-    CopilotSw.agentState.isRunning = false;
-    if (CopilotSw.activeLLMController) {
-      CopilotSw.activeLLMController.abort();
-      CopilotSw.activeLLMController = null;
+    agentState.isRunning = false;
+    if (activeLLMController) {
+      activeLLMController.abort();
+      setActiveLLMController(null);
     }
 
-    Object.keys(CopilotSw.approvalPromises || {}).forEach((approvalId) => {
-      CopilotSw.approvalPromises[approvalId](false);
-      delete CopilotSw.approvalPromises[approvalId];
-      delete CopilotSw.pendingApprovals[approvalId];
+    Object.keys(approvalPromises).forEach((approvalId) => {
+      approvalPromises[approvalId](false);
+      delete approvalPromises[approvalId];
+      delete pendingApprovals[approvalId];
     });
 
-    CopilotSw.agentState.save();
-    CopilotSw.updateAgentStatus('stopped', 'Agent run stopped.', false);
+    agentState.save();
+    updateAgentStatus('stopped', 'Agent run stopped.', false);
     sendResponse({ success: true });
   }
 
   if (request.action === 'clearChat') {
-    CopilotSw.clearAgentSession().then(sendResponse).catch(err => {
+    clearAgentSession({ approvalPromises, pendingApprovals }).then(sendResponse).catch(err => {
       sendResponse({ error: err.message });
     });
     return true;
   }
 
   if (request.action === 'approveAction') {
-    CopilotSw.handleApproveAction(request.actionId).then(sendResponse).catch(err => {
+    handleApproveAction(request.actionId).then(sendResponse).catch(err => {
       sendResponse({ error: err.message });
     });
     return true;
   }
 
   if (request.action === 'rejectAction') {
-    CopilotSw.handleRejectAction(request.actionId).then(sendResponse).catch(err => {
+    handleRejectAction(request.actionId).then(sendResponse).catch(err => {
       sendResponse({ error: err.message });
     });
     return true;
   }
 
   if (request.action === 'getChatHistory') {
-    CopilotSw.agentState.load().then(() => {
+    agentState.load().then(() => {
       sendResponse({
-        history: CopilotSw.agentState.chatHistory,
-        isRunning: CopilotSw.agentState.isRunning,
-        iteration: CopilotSw.agentState.iterationCount,
-        maxIterations: CopilotSw.CONFIG.MAX_REACT_ITERATIONS,
-        currentGoal: CopilotSw.agentState.currentGoal,
+        history: agentState.chatHistory,
+        isRunning: agentState.isRunning,
+        iteration: agentState.iterationCount,
+        maxIterations: CONFIG.MAX_REACT_ITERATIONS,
+        currentGoal: agentState.currentGoal,
       });
     }).catch(err => {
       sendResponse({ error: err.message });
@@ -84,10 +73,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
-  if (request.action === 'getSuggestedPrompts') {
-    CopilotSw.getSuggestedPrompts().then(sendResponse).catch(err => {
-      sendResponse({ error: err.message });
-    });
+  if (request.action === 'pageContextChanged') {
+    // Forward navigation/context change signals from the content script to the UI.
+    chrome.runtime.sendMessage(request).catch(() => {});
+    sendResponse?.({ success: true });
     return true;
   }
+
+  return false;
 });

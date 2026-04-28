@@ -17,10 +17,12 @@ export default defineConfig({
     rollupOptions: {
       input: {
         popup: path.resolve(__dirname, 'src/ui/popup.js'),
+        'service-worker': path.resolve(__dirname, 'src/background/service-worker.js'),
       },
       output: {
         entryFileNames: '[name].js',
         assetFileNames: '[name].[ext]',
+        format: 'es',
       },
     },
   },

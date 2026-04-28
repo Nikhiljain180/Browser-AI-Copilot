@@ -3,7 +3,7 @@
  * Handles context truncation and optimization
  */
 
-class TokenBudgetManager {
+export class TokenBudgetManager {
   constructor(maxTokens = 3000) {
     this.maxTokens = maxTokens;
   }
@@ -84,5 +84,3 @@ class TokenBudgetManager {
     return recentMessages;
   }
 }
-
-module.exports = TokenBudgetManager;

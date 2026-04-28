@@ -1,37 +1,34 @@
-/* global CopilotSw */
+export const pendingApprovals = {};
+export const approvalPromises = {};
 
-CopilotSw.pendingApprovals = CopilotSw.pendingApprovals || {};
-CopilotSw.approvalPromises = CopilotSw.approvalPromises || {};
-
-CopilotSw.waitForApproval = function waitForApproval(approvalId, timeoutMs) {
+export function waitForApproval(approvalId, timeoutMs) {
   return new Promise((resolve) => {
-    CopilotSw.approvalPromises[approvalId] = resolve;
+    approvalPromises[approvalId] = resolve;
     setTimeout(() => {
-      if (CopilotSw.approvalPromises[approvalId]) {
-        delete CopilotSw.approvalPromises[approvalId];
+      if (approvalPromises[approvalId]) {
+        delete approvalPromises[approvalId];
         resolve(false);
       }
     }, timeoutMs);
   });
-};
+}
 
-CopilotSw.handleApproveAction = async function handleApproveAction(approvalId) {
-  const resolver = CopilotSw.approvalPromises[approvalId];
+export async function handleApproveAction(approvalId) {
+  const resolver = approvalPromises[approvalId];
   if (resolver) {
     resolver(true);
-    delete CopilotSw.approvalPromises[approvalId];
+    delete approvalPromises[approvalId];
   }
-  delete CopilotSw.pendingApprovals[approvalId];
+  delete pendingApprovals[approvalId];
   return { success: true };
-};
+}
 
-CopilotSw.handleRejectAction = async function handleRejectAction(approvalId) {
-  const resolver = CopilotSw.approvalPromises[approvalId];
+export async function handleRejectAction(approvalId) {
+  const resolver = approvalPromises[approvalId];
   if (resolver) {
     resolver(false);
-    delete CopilotSw.approvalPromises[approvalId];
+    delete approvalPromises[approvalId];
   }
-  delete CopilotSw.pendingApprovals[approvalId];
+  delete pendingApprovals[approvalId];
   return { success: true };
-};
-
+}
