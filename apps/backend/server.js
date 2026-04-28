@@ -26,6 +26,7 @@ app.use(express.json({ limit: '10mb' }));
 // ============================================
 
 const PORT = process.env.PROXY_PORT || 3000;
+const HOST = process.env.PROXY_HOST || '127.0.0.1';
 
 // System prompt for the agent
 const SYSTEM_PROMPT = `You are a Browser AI Copilot - an autonomous agent that reasons about web pages and takes actions.
@@ -81,11 +82,15 @@ Rules:
 - Match fields using label, placeholder, type, section title, and required status.
 - For "dummy data" requests, generate realistic but harmless sample values.
 - If the user provides a specific value, prefer it.
+- Never use the user's instruction text itself as a field value (e.g. do not set "name" to "fill this form...").
 - Skip fields whose purpose is unclear instead of guessing wildly.
 - Use the form button inventory to decide whether the next safe action is continue/next or a final submit.
+- Never treat a submit/post/apply/send button as a "continue" action.
 - If required fields are still missing and you cannot infer safe values, return next_action = "ask_user" with targeted questions in missing_required.
 - If a visible next/continue button should be clicked after filling, return next_action = "continue" and target_button_agent_id.
-- If a final submit/apply/send button should be clicked, return next_action = "request_approval" and target_button_agent_id.
+- Only suggest a final submit/post/apply/send action when the user explicitly asked to submit (e.g. "submit the form", "fill and submit", "post the reply").
+- If the user asked to fill only, set next_action = "fill_only" or "done" (do not set request_approval).
+- If a final submit/post/apply/send button exists but the user did not ask to submit, do NOT return request_approval.
 - Never include delete, purchase, or unrelated destructive actions.
 - Return JSON only.`;
 
@@ -482,11 +487,12 @@ async function start() {
       console.warn(`⚠️ LLM provider not initialized: ${initError.message}`);
     }
 
-    app.listen(PORT, () => {
+    app.listen(PORT, HOST, () => {
       console.log(`
 ╔════════════════════════════════════════════════╗
 ║  Browser AI Copilot Backend                    ║
 ║  Listening on port ${PORT}                       ║
+║  Host: ${HOST}                                   ║
 ║  Provider: ${getLLMProvider()}                              ║
 ║  Model: ${getLLMModel()}                                 ║
 ╚════════════════════════════════════════════════╝

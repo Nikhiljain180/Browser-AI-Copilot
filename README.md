@@ -64,7 +64,7 @@ A sophisticated, autonomous AI agent Chrome extension that reasons about web pag
 │                        │  • Retry logic   │  │  • sanitize  │  │
 │                        └──────────────────┘  └──────────────┘  │
 │                             │                                    │
-│                             │ (Port 9999)                        │
+│                             │ (HTTP: 127.0.0.1:3000)             │
 └─────────────────────────────┼────────────────────────────────────┘
                               │
                     ┌─────────▼──────────┐
@@ -245,7 +245,14 @@ browser-ai-copilot/
 │   │   │   ├── content/
 │   │   │   │   └── content-script.js       # DOM tools & perception
 │   │   │   ├── background/
-│   │   │   │   └── service-worker.js       # ReAct loop orchestrator
+│   │   │   │   ├── service-worker.js       # MV3 SW entrypoint (importScripts)
+│   │   │   │   ├── agent/                  # ReAct loop + fallbacks
+│   │   │   │   ├── workflows/              # Form workflows
+│   │   │   │   ├── tools/                  # Tool executor + approvals
+│   │   │   │   ├── llm/                    # LLM proxy client
+│   │   │   │   ├── core/                   # config/state/ui/tabs helpers
+│   │   │   │   ├── intents.js              # intent routing helpers
+│   │   │   │   └── suggestions.js          # dynamic starter prompts
 │   │   │   └── tools/
 │   │   │       ├── tool-registry.js        # Tool definitions
 │   │   │       ├── sanitizer.js            # DOMPurify wrapper
@@ -259,13 +266,7 @@ browser-ai-copilot/
 │   │   └── package.json
 │   │
 │   └── backend/                            # Node.js Express Proxy
-│       ├── server.js                       # Main server
-│       ├── routes/
-│       │   ├── llm.js                      # /api/llm/*
-│       │   └── config.js                   # /api/config/*
-│       ├── middleware/
-│       │   ├── auth.js                     # API key validation
-│       │   └── errorHandler.js             # Error handling
+│       ├── server.js                       # Express server (LLM + forms plan)
 │       └── package.json
 │
 ├── tests/
@@ -276,9 +277,7 @@ browser-ai-copilot/
 │   ├── e2e/
 │   │   └── playwright.config.js            # E2E config
 │   └── fixtures/
-│       ├── ecommerce.html                  # Test page (products table)
-│       ├── form.html                       # Test page (form filling)
-│       └── dashboard.html                  # Test page (data extraction)
+│       └── ecommerce.html                  # Products table + contact form + reply textarea
 │
 ├── demo/
 │   ├── demo-video.md                       # Demo recording guide
@@ -326,6 +325,7 @@ cp .env.example .env
 # LLM_PROVIDER=openai
 # LLM_MODEL=gpt-4
 # OPENAI_API_KEY=sk-xxxxxx...
+# PROXY_HOST=127.0.0.1
 # PROXY_PORT=3000
 ```
 
@@ -366,11 +366,21 @@ open -a "Google Chrome"
 # Go to: chrome://extensions/
 # Enable "Developer mode" (top right)
 # Click "Load unpacked"
-# Select: browser-ai-copilot/apps/extension/public
+# Select: browser-ai-copilot/apps/extension
 ```
 
-**Terminal 3 - Watch UI Changes (Optional)**
+**When you change the UI code**
 ```bash
+# Rebuild the extension UI bundle
+npm run build --workspace=apps/extension
+
+# Then in chrome://extensions click "Reload" on the extension
+```
+
+**Optional: UI dev server (preview only)**
+```bash
+# Runs a standalone preview at http://localhost:5173/public/popup.html
+# (Chrome extension still uses the built files, not this server)
 npm run dev --workspace=apps/extension
 ```
 
@@ -505,6 +515,21 @@ npm run start --workspace=apps/backend
 
 ---
 
+## 🧩 What's Real vs. Mocked
+
+- **Real**
+  - Chrome extension (Manifest v3) side panel UI + background service worker + content script.
+  - Page context extraction from the live DOM (forms/inputs/buttons/tables/text).
+  - Tool execution via real browser events (`click_element`, `fill_input`) in the content script.
+  - Backend LLM gateway (Node/Express) calling real provider APIs (OpenAI / Anthropic).
+  - Human-in-the-loop approval gate for high-stakes clicks (submit/post/apply/send).
+- **Not implemented / intentionally simplified**
+  - True token streaming to the UI (the endpoint is JSON-over-HTTP; the UI shows phase/progress updates).
+  - Visual understanding (no screenshots/OCR).
+  - Robust, schema-guided extraction for arbitrary websites (current `extract_data` is heuristic-based for tables/lists).
+
+---
+
 ## ✅ Implementation Status
 
 | Feature | Status | Notes |
@@ -517,10 +542,10 @@ npm run start --workspace=apps/backend
 | **Vue.js UI** | ✅ Implemented | Chat, reasoning window, approval modal |
 | **Error Handling** | ✅ Implemented | Retry logic, timeout handling, graceful degradation |
 | **State Persistence** | ✅ Implemented | chrome.storage.local for SW restarts |
-| **Backend Proxy** | ✅ Implemented | Express server with LLM streaming |
-| **Unit Tests** | ✅ Implemented | Vitest for core logic |
-| **Integration Tests** | ✅ Implemented | Jest + Supertest for backend |
-| **E2E Tests** | 🟡 Scaffolded | Playwright config ready (requires setup) |
+| **Backend Proxy** | ✅ Implemented | Express server for LLM + form-plan endpoints (JSON) |
+| **Unit Tests** | ✅ Implemented | Vitest (agent logic) |
+| **Integration Tests** | ✅ Implemented | Jest + Supertest (backend routes) |
+| **E2E Tests** | 🟡 Scaffolded | Playwright scenarios included (environment-dependent) |
 | **Demo Video** | 🟡 Scaffolded | Recording guide provided |
 | **Documentation** | ✅ Complete | Comprehensive README with diagrams |
 
@@ -536,12 +561,8 @@ npm run start --workspace=apps/backend
 npm run test:unit
 
 # Tests include:
-# ✓ ReAct loop iteration management
-# ✓ LLM response parsing (JSON + regex fallback)
-# ✓ Tool execution validation
-# ✓ Token budget estimation & truncation
-# ✓ Sliding window conversation management
-# ✓ Error recovery & retries
+# ✓ Agent loop guardrails (iteration limits, finalization)
+# ✓ Response parsing behavior (JSON / fallback)
 ```
 
 ### Integration Tests (Backend Proxy)
@@ -550,12 +571,12 @@ npm run test:unit
 npm run test:integration
 
 # Tests include:
-# ✓ LLM streaming endpoint
-# ✓ Retry endpoint
+# ✓ LLM endpoint
+# ✓ Retry endpoint (JSON-only enforcement)
 # ✓ Health check
 # ✓ Config update
-# ✓ Error handling (missing params, invalid JSON)
-# ✓ Response schema validation
+# ✓ Forms plan endpoint
+# ✓ Error handling (missing params)
 ```
 
 ### End-to-End Tests (Full Workflows)

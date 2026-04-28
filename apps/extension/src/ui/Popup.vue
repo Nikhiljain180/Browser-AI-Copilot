@@ -272,6 +272,7 @@ let errorTimeoutId = null;
 let liveThoughtId = 0;
 let chatMutationObserver = null;
 let chatResizeObserver = null;
+let promptRefreshTimeoutId = null;
 
 const defaultQuickPrompts = [
   'Summarize this page in 5 bullets',
@@ -566,6 +567,35 @@ async function syncSuggestedPrompts() {
   quickPrompts.value = [...defaultQuickPrompts];
 }
 
+function schedulePromptRefresh() {
+  if (promptRefreshTimeoutId) {
+    clearTimeout(promptRefreshTimeoutId);
+  }
+  promptRefreshTimeoutId = setTimeout(() => {
+    syncSuggestedPrompts().catch(() => {});
+  }, 200);
+}
+
+function handleVisibilityChange() {
+  if (document.visibilityState === 'visible') {
+    schedulePromptRefresh();
+  }
+}
+
+function handleWindowFocus() {
+  schedulePromptRefresh();
+}
+
+function handleTabActivated() {
+  schedulePromptRefresh();
+}
+
+function handleTabUpdated(tabId, changeInfo) {
+  if (changeInfo?.status === 'complete' || changeInfo?.url) {
+    schedulePromptRefresh();
+  }
+}
+
 function applyStatusUpdate(status) {
   if (!status) return;
   if (status.phase) phase.value = status.phase;
@@ -765,6 +795,11 @@ async function rejectApproval() {
 }
 
 function handleRuntimeMessage(message) {
+  if (message.action === 'pageContextChanged') {
+    schedulePromptRefresh();
+    return;
+  }
+
   if (message.action === 'updateReasoning') {
     currentThought.value = message.thought || '';
     currentAction.value = message.actionName || message.action || '';
@@ -836,15 +871,28 @@ onMounted(async () => {
   await syncSuggestedPrompts();
   bindChatAutoScrollObservers();
   await scrollChatToBottom();
+
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+  window.addEventListener('focus', handleWindowFocus);
+  chrome.tabs?.onActivated?.addListener(handleTabActivated);
+  chrome.tabs?.onUpdated?.addListener(handleTabUpdated);
 });
 
 onUnmounted(() => {
   chrome.runtime.onMessage.removeListener(handleRuntimeMessage);
   chatMutationObserver?.disconnect();
   chatResizeObserver?.disconnect();
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
+  window.removeEventListener('focus', handleWindowFocus);
+  chrome.tabs?.onActivated?.removeListener(handleTabActivated);
+  chrome.tabs?.onUpdated?.removeListener(handleTabUpdated);
   if (errorTimeoutId) {
     clearTimeout(errorTimeoutId);
     errorTimeoutId = null;
+  }
+  if (promptRefreshTimeoutId) {
+    clearTimeout(promptRefreshTimeoutId);
+    promptRefreshTimeoutId = null;
   }
 });
 </script>
