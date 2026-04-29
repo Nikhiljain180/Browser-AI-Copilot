@@ -37,9 +37,12 @@
     }
   ],
   "icons": {
-    "16": "public/icon-16.png",
-    "48": "public/icon-48.png",
-    "128": "public/icon-128.png"
+    "16": "public/icon16.png",
+    "48": "public/icon48.png",
+    "128": "public/icon128.png",
+    "19": "public/icon19.png",
+    "32": "public/icon32.png",
+    "38": "public/icon38.png"
   },
   "host_permissions": [
     "<all_urls>"

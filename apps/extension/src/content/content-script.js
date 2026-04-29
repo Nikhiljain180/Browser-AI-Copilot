@@ -546,7 +546,7 @@ async function executeTool(toolName, toolInput) {
       return extractData(toolInput.target, toolInput.schema);
 
     case 'draft_reply':
-      return draftReply(toolInput.selector, toolInput.context, toolInput.tone);
+      return draftReply(toolInput);
 
     case 'summarize_page':
       return summarizePage(toolInput.max_length);
@@ -668,20 +668,30 @@ function normalizeDataKey(value) {
     .replace(/^_+|_+$/g, '') || 'value';
 }
 
-function draftReply(selector, context, tone = 'professional') {
+function draftReply(toolInput = {}) {
   try {
-    // This is a stub - in real implementation, LLM would generate reply
-    const element = resolveElement({ selector });
+    const selector = toolInput.selector;
+    const context = String(toolInput.context || '');
+    const tone = String(toolInput.tone || 'professional');
+    const element = resolveElement({ selector, agent_id: toolInput.agent_id, agentId: toolInput.agentId });
     if (!element) {
       return { error: `Reply field not found: ${selector}` };
     }
 
-    // For now, return placeholder
-    const draftReply = `[Draft reply in ${tone} tone based on: ${context.substring(0, 50)}...]`;
+    const providedDraft = typeof toolInput.draft === 'string' ? toolInput.draft.trim() : '';
+    const draftText = providedDraft || buildFallbackDraftReply(context, tone);
+
+    element.focus();
+    element.value = draftText;
+
+    const inputEvent = new Event('input', { bubbles: true });
+    const changeEvent = new Event('change', { bubbles: true });
+    element.dispatchEvent(inputEvent);
+    element.dispatchEvent(changeEvent);
 
     return {
       success: true,
-      draft: draftReply,
+      draft: draftText,
       selector,
       timestamp: Date.now()
     };
@@ -689,6 +699,21 @@ function draftReply(selector, context, tone = 'professional') {
   } catch (error) {
     return { error: error.message };
   }
+}
+
+function buildFallbackDraftReply(context, tone) {
+  const safeContext = String(context || '').trim().replace(/\s+/g, ' ').slice(0, 280);
+  const opener = tone === 'casual'
+    ? 'Hey —'
+    : tone === 'formal'
+      ? 'Hello,'
+      : 'Hi,';
+
+  if (!safeContext) {
+    return `${opener}\n\nThanks for reaching out. Happy to help.\n`;
+  }
+
+  return `${opener}\n\nThanks for the message. Regarding “${safeContext}”, here’s what I suggest:\n\n- \n\nBest,\n`;
 }
 
 function summarizePage(maxLength = 200) {

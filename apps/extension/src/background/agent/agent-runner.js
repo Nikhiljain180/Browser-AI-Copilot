@@ -163,11 +163,19 @@ CopilotSw.handleStartAgent = async function handleStartAgent(goal) {
 
       if (lmmResponse.action === 'final_answer') {
         CopilotSw.updateAgentStatus('finalizing', 'Wrapping up the final answer.', true);
+        const recentTools = [];
+        for (let i = CopilotSw.agentState.chatHistory.length - 1; i >= 0; i--) {
+          const msg = CopilotSw.agentState.chatHistory[i];
+          if (msg.role === 'user') break;
+          if (msg.role === 'tool' && msg.toolName) recentTools.unshift(msg.toolName);
+        }
+        const uniqueTools = [...new Set(recentTools)];
+
         CopilotSw.agentState.chatHistory.push({
           role: 'assistant',
           content: lmmResponse.answer,
           thought: lmmResponse.thought,
-          toolsUsed: [],
+          toolsUsed: uniqueTools,
           timestamp: Date.now()
         });
         continueLoop = false;

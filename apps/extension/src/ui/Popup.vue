@@ -63,12 +63,13 @@
           v-for="(message, index) in visibleMessages"
           :key="`${message.timestamp || index}-${message.role}-${index}`"
           :class="['message-row', message.role]"
+          data-testid="chat-message"
         >
           <div class="avatar">
             {{ message.role === 'user' ? 'You' : 'AI' }}
           </div>
 
-          <div class="message-card">
+          <div class="message-card" :data-testid="message.role === 'user' ? 'chat-message-user' : 'chat-message-assistant'">
             <div class="message-meta">
               <span class="message-role">
                 {{ message.role === 'user' ? 'You' : 'Copilot' }}
@@ -115,11 +116,17 @@
               </ul>
             </template>
             <p v-else class="message-content" v-html="formatRichText(message.content)" />
+            
+            <div v-if="message.toolsUsed && message.toolsUsed.length > 0" class="tool-badges">
+              <span v-for="tool in message.toolsUsed" :key="tool" class="tool-badge">
+                🔧 {{ tool }}
+              </span>
+            </div>
           </div>
         </article>
       </template>
 
-      <article v-if="isRunning" class="message-row assistant pending">
+      <article v-if="isRunning" class="message-row assistant pending" data-testid="chat-message-pending">
         <div class="avatar">AI</div>
 
         <div class="message-card pending-card">
@@ -156,6 +163,7 @@
           class="composer-input"
           rows="1"
           placeholder="Message the copilot..."
+          data-testid="composer-input"
           @keydown.enter.exact.prevent="submitPrompt"
           @keydown.meta.enter.prevent="submitPrompt"
           @keydown.ctrl.enter.prevent="submitPrompt"
@@ -170,6 +178,7 @@
             class="send-button"
             type="button"
             :disabled="!canSend"
+            data-testid="composer-send"
             @click="submitPrompt"
           >
             <span v-if="isRunning" class="button-spinner" />
@@ -181,13 +190,13 @@
 
     <transition name="fade">
       <div v-if="approvalRequest" class="modal-backdrop">
-        <div class="approval-modal">
+        <div class="approval-modal" data-testid="approval-modal">
           <div class="modal-header">
             <div>
               <p class="eyebrow">Approval required</p>
               <h2>Review action before continuing</h2>
             </div>
-            <button class="icon-button" type="button" @click="rejectApproval">
+            <button class="icon-button" type="button" data-testid="approval-close" @click="rejectApproval">
               Close
             </button>
           </div>
@@ -209,10 +218,10 @@
           </div>
 
           <div class="modal-footer">
-            <button class="secondary-button" type="button" @click="rejectApproval">
+            <button class="secondary-button" type="button" data-testid="reject-button" @click="rejectApproval">
               Reject
             </button>
-            <button class="send-button approve" type="button" @click="approveApproval">
+            <button class="send-button approve" type="button" data-testid="approve-button" @click="approveApproval">
               Approve
             </button>
           </div>
@@ -917,3 +926,24 @@ onUnmounted(() => {
   }
 });
 </script>
+
+<style scoped>
+.tool-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-top: 0.75rem;
+}
+
+.tool-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background-color: var(--bg-tertiary);
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid var(--border-color);
+}
+</style>

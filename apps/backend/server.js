@@ -50,6 +50,7 @@ Guidelines:
 - For simple informational requests like summarizing, explaining, or answering questions about the current page, prefer finishing with "final_answer" as soon as you have enough context
 - When the prompt includes "Query Type: informational", you MUST respond with action: "final_answer" in the first iteration (do not call tools).
 - For extraction requests involving products, leads, rows, or table data, prefer calling "extract_data" once and then respond with "final_answer" using the extracted structured result
+- For "draft_reply", include a "draft" string in action_input that is ready to be inserted into the target field
 - Avoid repeating the same tool call unless the page changed or the prior tool result returned an error
 - When you've completed the task, use action: "final_answer" with your response
 
