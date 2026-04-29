@@ -6,15 +6,20 @@ A sophisticated, autonomous AI agent Chrome extension that reasons about web pag
 
 1. [Overview](#overview)
 2. [Architecture](#architecture)
-3. [Key Design Decisions](#key-design-decisions)
-4. [Project Structure](#project-structure)
-5. [Setup Instructions](#setup-instructions)
-6. [Running Locally](#running-locally)
-7. [Demo Reproduction Guide](#demo-reproduction-guide)
-8. [Implementation Status](#implementation-status)
-9. [Testing](#testing)
-10. [Trade-offs & Limitations](#trade-offs--limitations)
-11. [Future Enhancements](#future-enhancements)
+3. [Dual-Mode Intelligence](#dual-mode-intelligence)
+4. [LLM Output Contract](#llm-output-contract)
+5. [Key Design Decisions](#key-design-decisions)
+6. [Tool & Action Design](#tool--action-design)
+7. [Project Structure](#project-structure)
+8. [Setup Instructions](#setup-instructions)
+9. [LLM Configuration](#llm-configuration)
+10. [Running Locally](#running-locally)
+11. [Error Handling & Resilience](#error-handling--resilience)
+12. [Demo Reproduction Guide](#demo-reproduction-guide)
+13. [Implementation Status](#implementation-status)
+14. [Testing](#testing)
+15. [Trade-offs & Limitations](#trade-offs--limitations)
+16. [Future Enhancements](#future-enhancements)
 
 ---
 
@@ -144,6 +149,155 @@ User Input
 
 ---
 
+## 🎯 Dual-Mode Intelligence
+
+The agent intelligently chooses between two flows based on the user's query:
+
+### **Flow 1: Informational Mode** (Direct Answer)
+**When:** User asks for page analysis, summaries, or questions about page content
+
+**Example Prompts:**
+- "Summarize this page"
+- "What are the key metrics on this dashboard?"
+- "List all products with their prices"
+
+**Agent Behavior:**
+1. Extract page context (Accessibility Tree)
+2. Call LLM with page context already in system prompt
+3. LLM responds with `action: "final_answer"` immediately
+4. Return answer to user in 1-2 seconds
+
+**Why This Matters:** Page context is already provided to the LLM in the system prompt. There's no need for a tool call loop—just ask, get answer, done. This is **fast and efficient** for read-only queries.
+
+```json
+{
+  "thought": "The user wants a summary. I have the page content in the system prompt already.",
+  "action": "final_answer",
+  "answer": "- Key Metric 1: 95% uptime\n- Key Metric 2: 2M active users\n- Key Metric 3: $50B market cap"
+}
+```
+
+---
+
+### **Flow 2: Action Mode** (ReAct with Tools)
+**When:** User asks for DOM manipulation, form filling, clicking, extracting structured data, etc.
+
+**Example Prompts:**
+- "Fill this form with dummy data"
+- "Click the 'Next' button and extract the product list"
+- "Find the most expensive item and click on it"
+
+**Agent Behavior:**
+1. Read page context (Accessibility Tree)
+2. Call LLM to decide next tool
+3. Execute tool (click, fill, extract, etc.)
+4. Observe result
+5. Loop back to step 2 until `action: "final_answer"`
+6. May take 10-30 seconds for multi-step tasks
+
+**Why This Matters:** Actions require up-to-date DOM state. The agent loops, executes, and re-reads the page after each action to detect DOM changes (SPA navigation, lazy-loaded content, form responses, etc.).
+
+```json
+// Iteration 1
+{
+  "thought": "User wants to fill a form. I need to read the page first to see the form structure.",
+  "action": "read_page",
+  "action_input": {}
+}
+
+// Iteration 2
+{
+  "thought": "Now I see the form fields. I should fill them with sample data.",
+  "action": "fill_input",
+  "action_input": {"selector": "input[name='email']", "value": "user@example.com"}
+}
+
+// Iteration 3
+{
+  "thought": "Form filled. Now submit it.",
+  "action": "final_answer",
+  "answer": "✅ Form filled and ready. Tell me to submit if you want me to submit it."
+}
+```
+
+---
+
+### **Decision Logic**
+The LLM **automatically detects the query type** from the system prompt instructions:
+- "If the user's question can be answered from the page context already provided, respond immediately with `final_answer`."
+- "Only use tools when you need to interact with the page or need updated/more specific page data."
+
+**No hardcoded routing needed**—the LLM decides based on the request. ✨
+
+---
+
+## 📋 LLM Output Contract
+
+Every response from the LLM **must** be valid JSON matching this exact schema:
+
+```json
+{
+  "thought": "string — the agent's internal reasoning about the current state and what to do next (always provided)",
+  
+  "action": "string — the tool name to invoke, or 'final_answer' if task is complete
+             Valid values: read_page | click_element | fill_input | extract_data | draft_reply | summarize_page | request_approval | final_answer",
+  
+  "action_input": {
+    "description": "object — tool-specific parameters. Tool-specific keys depend on 'action'
+                    Example for click_element: { 'selector': '#submit-btn', 'description': 'Submit form' }
+                    Example for fill_input: { 'selector': '#email', 'value': 'test@example.com' }"
+  },
+  
+  "answer": "string | null — the final natural-language response to the user
+             Only populated when action = 'final_answer'
+             Can be a single string or an array of bullet strings for readability
+             Can include markdown formatting (links, emphasis, lists)"
+}
+```
+
+### **Parsing Rules**
+
+1. **Valid JSON:** If response is valid JSON, parse directly
+2. **Malformed JSON:** Use regex fallback: `/\{[\s\S]*\}/` to extract JSON object
+3. **Regex Extract Fails:** Log error, inform user ("I received an unexpected response from the AI. Retrying..."), retry once
+4. **Retry Fails:** Display error clearly in chat and allow manual retry
+
+### **Example Responses**
+
+**Example 1: Read Page Tool**
+```json
+{
+  "thought": "User asked about products. I need to read the page first to see them.",
+  "action": "read_page",
+  "action_input": { "focus_area": "table.products" },
+  "answer": null
+}
+```
+
+**Example 2: Direct Answer (Informational)**
+```json
+{
+  "thought": "The user asked about page metrics. I can answer directly from the page context provided.",
+  "action": "final_answer",
+  "answer": "- **Conversion Rate:** 3.2%\n- **Avg Order Value:** $145\n- **Bounce Rate:** 42%"
+}
+```
+
+**Example 3: Multi-Tool Sequence (Action Mode)**
+```json
+{
+  "thought": "User wants to fill and submit a form. First, I should click the 'Edit' button to enable the form.",
+  "action": "click_element",
+  "action_input": { 
+    "selector": "button[data-action='edit']",
+    "description": "Enable form editing"
+  },
+  "answer": null
+}
+```
+
+---
+
 ## 🧠 Key Design Decisions
 
 ### 1. **Accessibility Tree vs. Raw DOM**
@@ -232,7 +386,92 @@ User Input
 
 ---
 
-## 📁 Project Structure
+## � Tool & Action Design
+
+### Tool Registry
+
+The agent has access to 7 tools, each handling a specific task. Requests for destructive actions (form submit, delete, buy) trigger the HITL approval gate.
+
+| Tool | Purpose | Parameters | Requires Approval |
+|------|---------|------------|-------------------|
+| **read_page** | Extract fresh page structure (Accessibility Tree) | `focus_area?` (CSS selector) | No |
+| **click_element** | Click an element using stable selectors | `selector` (CSS), `description` (human text) | Yes* |
+| **fill_input** | Fill form fields with framework-compatible events | `selector` (CSS), `value` (string) | No |
+| **extract_data** | Extract structured data as JSON | `target` (selector), `schema?` (object) | No |
+| **draft_reply** | Generate professional reply and auto-fill | `selector` (CSS), `context` (string), `tone?` | No |
+| **summarize_page** | Concise summary of page content | `max_length?` (number) | No |
+| **request_approval** | Pause execution for user approval | `action_description` (string), `risk_level` ("medium"\|"high") | N/A |
+
+**\*Conditional:** `click_element` requires approval **only** if it's a destructive action (contains "submit", "send", "apply", "buy", "delete", etc.)
+
+### Tool Selection Logic
+
+The agent uses this logic to pick tools:
+
+```
+User Request
+    ↓
+[Informational? (summarize, explain, Q&A)]
+    ├─→ YES: Return final_answer directly (no tools needed)
+    └─→ NO: Continue to next step
+         ↓
+[Need updated page data?]
+    ├─→ YES: Call read_page first
+    └─→ NO: Use cached page context
+         ↓
+[Action required?]
+    ├─→ click_element: User wants to interact (click, navigate)
+    ├─→ fill_input: User wants to fill forms
+    ├─→ extract_data: User wants structured data from page
+    ├─→ draft_reply: User wants to compose and send reply
+    └─→ summarize_page: User wants page summary
+         ↓
+[Is it destructive? (submit, post, send, delete, buy)]
+    ├─→ YES: Call request_approval
+    └─→ NO: Execute directly
+         ↓
+Execute tool → Observe result → Loop back to LLM
+```
+
+### Example Tool Sequences
+
+**Example 1: Simple Extraction**
+```
+User: "Extract all products from this page"
+        ↓
+1. read_page
+2. extract_data (target: "table.products")
+3. final_answer (return structured JSON)
+```
+
+**Example 2: Multi-Step Workflow**
+```
+User: "Find the most expensive product, click on it, and get its details"
+        ↓
+1. read_page (scan all products)
+2. click_element (click on "View Details" for expensive product)
+3. read_page (updated page after click)
+4. extract_data (get product details from new page)
+5. final_answer (return structured product info)
+```
+
+**Example 3: Form Fill + Submit with HITL Gate**
+```
+User: "Fill out the contact form and submit it"
+        ↓
+1. read_page (inspect form structure)
+2. fill_input (fill "Name" field)
+3. fill_input (fill "Email" field)
+4. fill_input (fill "Message" field)
+5. request_approval (user clicks Submit button - HIGH RISK)
+6. [USER APPROVES in modal]
+7. click_element (submit button)
+8. final_answer ("Form submitted successfully")
+```
+
+---
+
+## �📁 Project Structure
 
 ```
 browser-ai-copilot/
@@ -338,6 +577,93 @@ npm run build --workspace=apps/extension
 # Or in watch mode (development):
 npm run dev --workspace=apps/extension
 ```
+
+---
+
+## 🔑 LLM Configuration
+
+The extension supports **multiple LLM providers** and can be reconfigured at runtime without code changes.
+
+### Supported Providers
+
+| Provider | Model(s) | Default | Cost | Context |
+|----------|----------|---------|------|---------|
+| **OpenAI** | gpt-4, gpt-4-turbo, gpt-3.5-turbo | gpt-4 | ~$0.03/req | 8K-128K tokens |
+| **Anthropic** | claude-3-opus, claude-3-sonnet, claude-3-haiku | claude-3-opus | ~$0.015/req | 100K tokens |
+| **Google** | gemini-pro (reserved for future) | N/A | TBD | TBD |
+
+### Environment Setup
+
+1. **Get API Keys:**
+   - **OpenAI:** https://platform.openai.com/api-keys
+   - **Anthropic:** https://console.anthropic.com/
+   - **Google:** https://makersuite.google.com/app/apikey
+
+2. **Set in `.env`:**
+   ```bash
+   # LLM Provider (openai | anthropic)
+   LLM_PROVIDER=openai
+   LLM_MODEL=gpt-4
+   
+   # API Keys (keep these SAFE!)
+   OPENAI_API_KEY=sk-xxxxxx...
+   ANTHROPIC_API_KEY=sk-ant-xxxxxx...
+   GOOGLE_API_KEY=xxxxxx...
+   ```
+
+### Runtime Configuration
+
+**Change LLM via API Endpoint:**
+```bash
+curl -X POST http://localhost:3000/api/config/update \
+  -H "Content-Type: application/json" \
+  -d '{
+    "LLM_PROVIDER": "anthropic",
+    "LLM_MODEL": "claude-3-sonnet-20240229"
+  }'
+
+# Response:
+# { "success": true, "config": { "provider": "anthropic", "model": "claude-3-sonnet..." } }
+```
+
+**Check Current Config:**
+```bash
+curl http://localhost:3000/api/health
+
+# Response includes active provider, model, and status
+```
+
+### Model Selection Guide
+
+- **gpt-4** (OpenAI)
+  - Best for: Complex reasoning, multi-step tasks
+  - Cost: Higher (~$0.03/req)
+  - Speed: Slower (~3-5s)
+  - Use when: Accuracy matters more than speed
+
+- **gpt-3.5-turbo** (OpenAI)
+  - Best for: Fast, simple tasks
+  - Cost: Lower (~$0.001/req)
+  - Speed: Fast (~1-2s)
+  - Use when: Budget is tight, tasks are simple
+
+- **claude-3-opus** (Anthropic)
+  - Best for: Very complex reasoning, 100K context
+  - Cost: Medium (~$0.015/req)
+  - Speed: Moderate (~2-3s)
+  - Use when: Need large context window
+
+- **claude-3-sonnet** (Anthropic)
+  - Best for: Balanced speed/quality, 100K context
+  - Cost: Low (~$0.003/req)
+  - Speed: Fast (~1-2s)
+  - Use when: Want cheap + smart
+
+### Fallback & Retry
+
+- **Automatic Retry:** If LLM times out or returns rate-limit error, auto-retry once after 800ms
+- **Timeout:** Default 30 seconds (configurable via `LLM_TIMEOUT_MS`)
+- **Fallback:** If LLM fails after retry, show error in chat with manual retry button
 
 ---
 
@@ -512,6 +838,175 @@ npm run start --workspace=apps/backend
      ```
 
 3. Chat shows error state with option to retry manually
+
+---
+
+## ⚠️ Error Handling & Resilience
+
+The agent is designed to fail gracefully and recover intelligently.
+
+### Tool Execution Failures
+
+**Scenario:** Agent tries to click a button that doesn't exist or has moved
+
+```
+User: "Click the submit button"
+    ↓
+Agent calls: click_element({ selector: "#submit-btn" })
+    ↓
+Tool returns: { error: "Element not found: #submit-btn" }
+    ↓
+Agent automatically RETRIES ONCE (fresh page read)
+    ↓
+If still fails: Reports to user with clear message
+    ↓
+User can manually retry or provide different instruction
+```
+
+**Implementation:**
+- First attempt: Execute tool as requested
+- Second attempt: Re-read page + retry tool
+- If still fails: Show error in chat, don't crash
+- Message: "I tried to click the 'Submit' button but it wasn't found. The DOM may have changed or the selector is incorrect."
+
+---
+
+### LLM Response Parsing Failures
+
+**Scenario:** LLM returns malformed JSON or unexpected format
+
+```
+Attempt 1: Try to parse response as JSON
+    ↓ (if valid JSON) ✅ Process and continue
+    ↓ (if invalid JSON) Extract JSON using regex: /\{[\s\S]*\}/
+         ↓ (regex found JSON) ✅ Parse extracted JSON
+         ↓ (regex failed) Inform user & retry
+```
+
+**Retry Logic:**
+- If JSON extraction fails: Show message "I received an unexpected response from the AI. Retrying..."
+- Automatic retry: Yes, once
+- If retry also fails: Display error clearly, offer manual retry button
+- Error message: "The AI model didn't respond in the expected format. Please try again."
+
+---
+
+### Timeout Handling
+
+**Scenario:** LLM API takes too long or network is slow
+
+| Event | Timeout | Action |
+|-------|---------|--------|
+| LLM API Call | 30 seconds (configurable: `LLM_TIMEOUT_MS`) | Abort request, show "LLM request timed out" |
+| Tool Execution | 30 seconds (configurable: `TOOL_TIMEOUT_MS`) | Abort execution, mark as failed |
+| Approval Modal | 120 seconds (2 minutes) | Auto-reject if no user response |
+
+**User Experience:**
+- Chat shows: "The request took too long. [Retry]"
+- User can click Retry or try a different task
+- No silent failures—always inform user
+
+---
+
+### Offline / Backend Unavailable
+
+**Scenario:** Backend proxy server (http://127.0.0.1:3000) is not running
+
+**Detection:**
+- Health check on load: `GET /api/health`
+- Continuous monitoring: Retry health check if backend unreachable
+
+**UI Display:**
+```
+🔴 OFFLINE
+Backend Unavailable — The AI Copilot proxy server is unreachable
+
+[↻ Retry]
+```
+
+**What happens if user tries to send message while offline:**
+1. UI disables send button
+2. Shows error banner: "Backend is offline. Please start the server."
+3. Provides retry button
+4. Periodic auto-retry every 5 seconds
+
+**Recovery:**
+1. User starts backend: `npm run dev:backend`
+2. Extension detects health check passes
+3. UI clears offline banner, enables send button
+4. No message loss (chat history is in chrome.storage.local)
+
+---
+
+### Service Worker Restart (State Recovery)
+
+**Scenario:** Chrome closes the Service Worker or it crashes mid-task
+
+**Resilience:**
+- Agent state saved to `chrome.storage.local` after every iteration
+- State includes: chat history, current goal, page context, iteration count
+- On Service Worker restart: Load state from storage and resume from last known point
+- No task loss—user sees full chat history + can continue
+
+**What is persisted:**
+```javascript
+{
+  chatHistory: [...],        // All messages (user, assistant, tool)
+  currentGoal: "...",        // User's current request
+  pageContext: {...},        // Last known page data
+  iterationCount: 3,         // How many iterations completed
+  isRunning: false           // Whether task is in progress
+}
+```
+
+---
+
+### Max Iteration Guard
+
+**Scenario:** Agent gets stuck in a loop trying the same thing repeatedly
+
+**Protection:**
+- Max iterations: 10 (configurable: `MAX_REACT_ITERATIONS`)
+- When limit reached: Stop loop, generate fallback answer from context
+- Fallback answer uses page data + tool results to synthesize response
+
+**User Message:**
+```
+The agent completed 10 iterations without finishing the task.
+Here's what I found so far:
+- [Extracted data / summary]
+
+You can try a simpler version of the request, or provide more specific guidance.
+```
+
+---
+
+### Destructive Action Safety (HITL)
+
+**Scenario:** User asks agent to submit a form or delete something
+
+**Safety Gate:**
+1. Agent detects destructive action keyword: "submit", "post", "send", "delete", "buy", "apply", "complete", "finish"
+2. Agent pauses and sends `request_approval` message
+3. UI shows modal with:
+   - ⚠️ Risk level (HIGH for destructive actions)
+   - What action will be taken
+   - Why approval is needed
+   - [Reject] [Approve] buttons
+
+**What if user rejects?**
+- Agent stops execution
+- Message in chat: "Action cancelled by user"
+- Task terminates gracefully
+
+**What if timeout (2 minutes)?**
+- Auto-reject
+- Message: "Approval timed out. Action was cancelled."
+
+**What if user approves?**
+- Proceed with action
+- Execute tool
+- Continue or finalize
 
 ---
 

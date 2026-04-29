@@ -221,6 +221,17 @@
     </transition>
 
     <transition name="fade">
+      <div v-if="offline" class="banner offline-banner">
+        <span>🔴 Backend Unavailable — The AI Copilot proxy server is unreachable</span>
+        <div class="banner-actions">
+          <button class="icon-button" type="button" @click="checkBackendHealth">
+            Retry
+          </button>
+        </div>
+      </div>
+    </transition>
+
+    <transition name="fade">
       <div v-if="errorMessage" class="banner error-banner">
         <span>{{ errorMessage }}</span>
         <div class="banner-actions">
@@ -262,6 +273,7 @@ let errorTimeoutId = null;
 let liveThoughtId = 0;
 let chatMutationObserver = null;
 let chatResizeObserver = null;
+let healthCheckIntervalId = null;
 
 const visibleMessages = computed(() => {
   return messages.value.filter(message => message.role !== 'tool');
@@ -722,6 +734,57 @@ async function stopAgent() {
   }
 }
 
+/**
+ * Check backend health status
+ * Updates offline state based on proxy availability
+ */
+async function checkBackendHealth() {
+  try {
+    const backendURL = 'http://127.0.0.1:3000/api/health';
+    const response = await fetch(backendURL, {
+      method: 'GET',
+      timeout: 5000,
+    });
+
+    if (response.ok) {
+      offline.value = false;
+    } else {
+      offline.value = true;
+    }
+  } catch (error) {
+    // Backend unreachable
+    offline.value = true;
+  }
+}
+
+/**
+ * Start periodic backend health checks
+ * Checks every 30 seconds
+ */
+function startHealthCheckPolling() {
+  if (healthCheckIntervalId) {
+    clearInterval(healthCheckIntervalId);
+  }
+
+  // Check immediately on start
+  checkBackendHealth();
+
+  // Then check every 30 seconds
+  healthCheckIntervalId = setInterval(() => {
+    checkBackendHealth();
+  }, 30000);
+}
+
+/**
+ * Stop health check polling
+ */
+function stopHealthCheckPolling() {
+  if (healthCheckIntervalId) {
+    clearInterval(healthCheckIntervalId);
+    healthCheckIntervalId = null;
+  }
+}
+
 async function startNewChat() {
   try {
     const response = await sendRuntimeMessage({ action: 'clearChat' });
@@ -840,12 +903,14 @@ onMounted(async () => {
   await syncHistory();
   bindChatAutoScrollObservers();
   await scrollChatToBottom();
+  startHealthCheckPolling();
 });
 
 onUnmounted(() => {
   chrome.runtime.onMessage.removeListener(handleRuntimeMessage);
   chatMutationObserver?.disconnect();
   chatResizeObserver?.disconnect();
+  stopHealthCheckPolling();
   if (errorTimeoutId) {
     clearTimeout(errorTimeoutId);
     errorTimeoutId = null;
