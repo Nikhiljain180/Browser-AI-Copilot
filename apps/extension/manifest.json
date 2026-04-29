@@ -21,8 +21,18 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["src/content/content-script.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "src/content/tools/read_page.js",
+        "src/content/tools/click_element.js",
+        "src/content/tools/fill_input.js",
+        "src/content/tools/extract_data.js",
+        "src/content/tools/draft_reply.js",
+        "src/content/tools/summarize_page.js",
+        "src/content/content-script.js"
+      ],
       "run_at": "document_start"
     }
   ],
@@ -31,5 +41,7 @@
     "48": "public/icon-48.png",
     "128": "public/icon-128.png"
   },
-  "host_permissions": ["<all_urls>"]
+  "host_permissions": [
+    "<all_urls>"
+  ]
 }

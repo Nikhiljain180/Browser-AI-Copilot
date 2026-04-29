@@ -207,15 +207,22 @@ CopilotSw.tryDirectFormWorkflow = async function tryDirectFormWorkflow(goal, pag
     }
   }
 
-  if (workflowPlan.nextAction === 'ask_user' && workflowPlan.missingRequired.length > 0) {
-    const questions = workflowPlan.missingRequired
-      .slice(0, 3)
-      .map(item => `- ${item.question || `Please provide ${item.label || 'this required detail'}.`}`);
-    return [
-      ...responseLines,
-      'I need a bit more information before I can continue:',
-      ...questions
-    ].filter(Boolean).join('\n');
+  if (workflowPlan.nextAction === 'ask_user') {
+    const lines = [...responseLines];
+    if (workflowPlan.summary) {
+      lines.push(workflowPlan.summary);
+    } else {
+      lines.push('I need a bit more information before I can continue:');
+    }
+    
+    if (workflowPlan.missingRequired.length > 0) {
+      const questions = workflowPlan.missingRequired
+        .slice(0, 3)
+        .map(item => `- ${item.question || `Please provide ${item.label || 'this required detail'}.`}`);
+      lines.push(...questions);
+    }
+    
+    return lines.filter(Boolean).join('\n\n');
   }
 
   if (workflowPlan.nextAction === 'continue' && workflowPlan.targetButton) {
@@ -275,6 +282,9 @@ CopilotSw.tryDirectFormWorkflow = async function tryDirectFormWorkflow(goal, pag
   }
 
   if (responseLines.length === 0) {
+    if (workflowPlan.summary) {
+      return workflowPlan.summary;
+    }
     if (wantsFill) {
       return 'I found the form, but I could not update any fields automatically on this page.';
     }
