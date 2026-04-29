@@ -16,6 +16,10 @@ CopilotSw.isDestructiveAction = function isDestructiveAction(toolName, toolInput
   return toolName === 'click_element';
 };
 
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 CopilotSw.executeToolWithApproval = async function executeToolWithApproval(toolName, toolInput, tabId) {
   if (!CopilotSw.isDestructiveAction(toolName, toolInput)) {
     return CopilotSw.executeTool(toolName, toolInput, tabId);
@@ -46,12 +50,33 @@ CopilotSw.executeToolWithApproval = async function executeToolWithApproval(toolN
 };
 
 CopilotSw.executeTool = async function executeTool(toolName, toolInput, tabId) {
-  const result = await CopilotSw.sendMessageToTab(tabId, {
-    action: 'executeTool',
-    toolName,
-    toolInput
-  });
+  let lastError = null;
 
-  return result;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    if (CopilotSw.agentState && CopilotSw.agentState.isRunning === false) {
+      return { error: 'Agent stopped by user.' };
+    }
+
+    try {
+      const result = await CopilotSw.sendMessageToTab(tabId, {
+        action: 'executeTool',
+        toolName,
+        toolInput
+      });
+
+      if (result && !result.error) {
+        return result;
+      }
+
+      lastError = new Error(result?.error || 'Tool returned an unknown error.');
+    } catch (error) {
+      lastError = error;
+    }
+
+    if (attempt === 1) {
+      await delay(250);
+    }
+  }
+
+  return { error: lastError?.message || 'Tool failed.' };
 };
-

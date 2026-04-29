@@ -41,12 +41,12 @@ test.describe('Browser AI Copilot E2E Tests', () => {
     await popupPage.goto(`chrome-extension://${extensionId}/public/popup.html`);
     
     // TEST: Send summarization request
-    await popupPage.fill('textarea, input[type="text"]', 'Summarize this page');
+    await popupPage.fill('[data-testid="composer-input"]', 'Summarize this page');
     await page.bringToFront(); // Ensure fixture is the active tab for the extension
-    await popupPage.click('button:has-text("Send"), button[type="submit"]');
+    await popupPage.click('[data-testid="composer-send"]');
     
     // VERIFY: Chat shows summary (wait for network/LLM delay)
-    await expect(popupPage.locator('.chat-message, [data-testid="chat-message"]').last()).toContainText('products', { timeout: 15000 });
+    await expect(popupPage.locator('[data-testid="chat-message-assistant"]').last()).toContainText('products', { timeout: 15000 });
     
     await page.close();
     await popupPage.close();
@@ -64,12 +64,12 @@ test.describe('Browser AI Copilot E2E Tests', () => {
     
     // TEST: Send multi-step request
     const request = 'Find the most expensive product and extract its details';
-    await popupPage.fill('textarea, input[type="text"]', request);
+    await popupPage.fill('[data-testid="composer-input"]', request);
     await page.bringToFront();
-    await popupPage.click('button:has-text("Send"), button[type="submit"]');
+    await popupPage.click('[data-testid="composer-send"]');
     
     // VERIFY: Final result contains extracted product data
-    const lastMessage = popupPage.locator('.chat-message, [data-testid="chat-message"]').last();
+    const lastMessage = popupPage.locator('[data-testid="chat-message-assistant"]').last();
     await expect(lastMessage).toContainText('4K Monitor', { timeout: 25000 });
     await expect(lastMessage).toContainText('$599.99');
     
@@ -89,23 +89,23 @@ test.describe('Browser AI Copilot E2E Tests', () => {
     
     // TEST: Send request that requires approval
     const request = 'Fill the contact form and submit it';
-    await popupPage.fill('textarea, input[type="text"]', request);
+    await popupPage.fill('[data-testid="composer-input"]', request);
     await page.bringToFront();
-    await popupPage.click('button:has-text("Send"), button[type="submit"]');
+    await popupPage.click('[data-testid="composer-send"]');
     
     // VERIFY: Agent fills non-destructive fields on the main page
     await expect(page.locator('input[name="name"]')).toHaveValue(/./, { timeout: 15000 });
     
     // VERIFY: Approval modal appears in the popup
-    const approvalModal = popupPage.locator('.modal, [data-testid="approval-modal"]');
+    const approvalModal = popupPage.locator('[data-testid="approval-modal"]');
     await expect(approvalModal).toBeVisible({ timeout: 15000 });
     await expect(approvalModal).toContainText('submit');
     
     // TEST: User approves action
-    await popupPage.click('button:has-text("Approve"), [data-testid="approve-button"]');
+    await popupPage.click('[data-testid="approve-button"]');
     
     // VERIFY: Chat shows success
-    await expect(popupPage.locator('.chat-message, [data-testid="chat-message"]').last()).toContainText('submitted', { timeout: 10000 });
+    await expect(popupPage.locator('[data-testid="chat-message-assistant"]').last()).toContainText('submitted', { timeout: 10000 });
     
     await page.close();
     await popupPage.close();
@@ -123,12 +123,12 @@ test.describe('Browser AI Copilot E2E Tests', () => {
     
     // TEST: Request agent to click non-existent element
     const request = 'Click the button with id "nonexistent"';
-    await popupPage.fill('textarea, input[type="text"]', request);
+    await popupPage.fill('[data-testid="composer-input"]', request);
     await page.bringToFront();
-    await popupPage.click('button:has-text("Send"), button[type="submit"]');
+    await popupPage.click('[data-testid="composer-send"]');
     
     // VERIFY: Error is reported clearly
-    await expect(popupPage.locator('.chat-message, [data-testid="chat-message"]').last()).toContainText('not found', { timeout: 20000 });
+    await expect(popupPage.locator('[data-testid="chat-message-assistant"]').last()).toContainText('not found', { timeout: 20000 });
     
     await page.close();
     await popupPage.close();

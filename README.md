@@ -146,6 +146,17 @@ The server will start on port 3000.
 - Enable "Developer mode"
 - Click "Load unpacked" and select `browser-ai-copilot/apps/extension`
 
+### Least-Privilege Manifest (Optional)
+
+The default `apps/extension/manifest.json` uses `<all_urls>` host permissions so the content script can run automatically.
+
+If you want a stricter, interview-friendly setup that relies only on `activeTab`, use `apps/extension/manifest.least-privilege.json`:
+
+1. Replace `apps/extension/manifest.json` with the least-privilege file (or copy its contents over).
+2. Reload the extension in `chrome://extensions/`.
+
+In this mode the extension injects `src/content/content-script.js` on-demand (via `chrome.scripting.executeScript`) when the agent first needs page context.
+
 ## Testing
 
 ```bash
