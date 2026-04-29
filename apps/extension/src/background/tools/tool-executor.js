@@ -1,19 +1,32 @@
 /* global CopilotSw */
 
-CopilotSw.isDestructiveAction = function isDestructiveAction(toolName, toolInput) {
-  const destructiveTools = ['click_element', 'fill_input'];
-  if (!destructiveTools.includes(toolName)) return false;
-
-  const description = String(toolInput?.description || '').toLowerCase();
+CopilotSw.classifyAction = function classifyAction(toolName, toolInput) {
+  const description = String(toolInput?.description || '').trim();
   const selector = String(toolInput?.selector || '').toLowerCase();
-  const combined = `${description} ${selector}`.trim();
+  const combined = `${description.toLowerCase()} ${selector}`.trim();
 
-  // Form submit / finalize actions are always high-stakes.
-  if (toolName === 'click_element' && /\b(submit|apply|send|finish|complete|post)\b/.test(combined)) {
-    return true;
+  // submit/delete verbs → high risk
+  if (toolName === 'click_element' && /\b(submit|apply|send|finish|complete|post|delete|remove|confirm)\b/.test(combined)) {
+    return {
+      requiresApproval: true,
+      riskLevel: 'high',
+      actionDescription: description || `Click "${toolInput?.selector || 'element'}" — this looks like a destructive submit/delete action.`
+    };
   }
 
-  return toolName === 'click_element';
+  if (toolName === 'click_element') {
+    return {
+      requiresApproval: true,
+      riskLevel: 'medium',
+      actionDescription: description || `Click "${toolInput?.selector || 'element'}".`
+    };
+  }
+
+  return { requiresApproval: false, riskLevel: 'low', actionDescription: description };
+};
+
+CopilotSw.isDestructiveAction = function isDestructiveAction(toolName, toolInput) {
+  return CopilotSw.classifyAction(toolName, toolInput).requiresApproval;
 };
 
 function delay(ms) {
@@ -21,7 +34,8 @@ function delay(ms) {
 }
 
 CopilotSw.executeToolWithApproval = async function executeToolWithApproval(toolName, toolInput, tabId) {
-  if (!CopilotSw.isDestructiveAction(toolName, toolInput)) {
+  const classification = CopilotSw.classifyAction(toolName, toolInput);
+  if (!classification.requiresApproval) {
     return CopilotSw.executeTool(toolName, toolInput, tabId);
   }
 
@@ -29,6 +43,8 @@ CopilotSw.executeToolWithApproval = async function executeToolWithApproval(toolN
   CopilotSw.pendingApprovals[approvalId] = {
     toolName,
     toolInput,
+    riskLevel: classification.riskLevel,
+    actionDescription: classification.actionDescription,
     timestamp: Date.now()
   };
 
@@ -36,7 +52,9 @@ CopilotSw.executeToolWithApproval = async function executeToolWithApproval(toolN
     action: 'requestApproval',
     approvalId,
     toolName,
-    toolInput
+    toolInput,
+    riskLevel: classification.riskLevel,
+    actionDescription: classification.actionDescription
   });
 
   const approved = await CopilotSw.waitForApproval(approvalId, CopilotSw.CONFIG.TOOL_TIMEOUT_MS);

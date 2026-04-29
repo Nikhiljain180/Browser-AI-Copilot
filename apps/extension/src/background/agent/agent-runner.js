@@ -1,5 +1,16 @@
 /* global CopilotSw */
 
+function ensureAgentStateShape() {
+  if (!CopilotSw.agentState.formSession) {
+    CopilotSw.agentState.formSession = {
+      active: false,
+      pendingFields: [],
+      lastAskedField: null,
+      filledFields: {}
+    };
+  }
+}
+
 function getStructuredRowsFromContext(lastContent, pageContext) {
   if (lastContent?.success && Array.isArray(lastContent.data) && lastContent.data.length > 0) {
     return lastContent.data;
@@ -77,6 +88,13 @@ CopilotSw.clearAgentSession = async function clearAgentSession() {
   CopilotSw.agentState.iterationCount = 0;
   CopilotSw.agentState.isRunning = false;
 
+  CopilotSw.agentState.formSession = {
+    active: false,
+    pendingFields: [],
+    lastAskedField: null,
+    filledFields: {}
+  };
+
   if (CopilotSw.activeLLMController) {
     CopilotSw.activeLLMController.abort();
     CopilotSw.activeLLMController = null;
@@ -102,6 +120,7 @@ CopilotSw.clearAgentSession = async function clearAgentSession() {
 CopilotSw.handleStartAgent = async function handleStartAgent(goal) {
   try {
     await CopilotSw.agentState.load();
+    ensureAgentStateShape();
 
     if (CopilotSw.agentState.isRunning) {
       throw new Error('Agent is already running');
@@ -111,7 +130,12 @@ CopilotSw.handleStartAgent = async function handleStartAgent(goal) {
     CopilotSw.agentState.currentGoal = goal;
     CopilotSw.agentState.iterationCount = 0;
     await CopilotSw.agentState.save();
-    CopilotSw.updateAgentStatus('reading', 'Collecting the current page context before starting.', true);
+
+    CopilotSw.updateAgentStatus(
+      'reading',
+      'Collecting the current page context before starting.',
+      true
+    );
 
     const tab = await CopilotSw.getUsableTab();
     const pageContext = await CopilotSw.sendMessageToTab(tab.id, {
@@ -128,41 +152,90 @@ CopilotSw.handleStartAgent = async function handleStartAgent(goal) {
     });
 
     const normalizedGoal = String(goal || '').toLowerCase();
-    const directFormWorkflowAnswer = await CopilotSw.tryDirectFormWorkflow(goal, CopilotSw.agentState.pageContext, tab.id);
-    if (directFormWorkflowAnswer && (CopilotSw.isFormFillGoal(normalizedGoal) || CopilotSw.isFormSubmitGoal(normalizedGoal))) {
-      CopilotSw.updateAgentStatus('finalizing', 'Wrapping up the form workflow.', true);
-      CopilotSw.agentState.chatHistory.push({
-        role: 'assistant',
-        content: directFormWorkflowAnswer,
-        timestamp: Date.now()
-      });
-      CopilotSw.agentState.currentGoal = null;
+
+    const isFormIntent =
+      CopilotSw.isFormFillGoal(normalizedGoal) ||
+      CopilotSw.isFormSubmitGoal(normalizedGoal) ||
+      (typeof CopilotSw.isFormClearGoal === 'function' && CopilotSw.isFormClearGoal(normalizedGoal));
+
+    const isFormSessionActive = !!CopilotSw.agentState.formSession?.active;
+
+    /*
+      IMPORTANT:
+      Always prioritize direct form workflow.
+      If a form session is active, do NOT fall back to the general LLM loop.
+    */
+    const directFormWorkflowAnswer = await CopilotSw.tryDirectFormWorkflow(
+      goal,
+      CopilotSw.agentState.pageContext,
+      tab.id
+    );
+
+    if (isFormSessionActive || isFormIntent || directFormWorkflowAnswer) {
+      const assistantMessage =
+        directFormWorkflowAnswer ||
+        (isFormSessionActive
+          ? 'Please provide the next requested form value.'
+          : 'I found the form, but I could not process it automatically.');
+
+      if (assistantMessage) {
+        CopilotSw.updateAgentStatus('finalizing', 'Wrapping up the form workflow.', true);
+        CopilotSw.agentState.chatHistory.push({
+          role: 'assistant',
+          content: assistantMessage,
+          timestamp: Date.now()
+        });
+      }
+
+      /*
+        Keep the session alive only if form workflow says it is still active.
+        Otherwise release the goal so the next request starts fresh.
+      */
+      if (!CopilotSw.agentState.formSession?.active) {
+        CopilotSw.agentState.currentGoal = null;
+      }
+
       CopilotSw.agentState.isRunning = false;
       await CopilotSw.agentState.save();
       CopilotSw.updateAgentStatus('idle', 'Ready for your next request.', false);
+
       return {
         success: true,
         chatHistory: CopilotSw.agentState.chatHistory
       };
     }
 
+    /*
+      Normal agent loop for non-form requests
+    */
     let continueLoop = true;
-    while (continueLoop && CopilotSw.agentState.isRunning && CopilotSw.agentState.iterationCount < CopilotSw.CONFIG.MAX_REACT_ITERATIONS) {
+
+    while (
+      continueLoop &&
+      CopilotSw.agentState.isRunning &&
+      CopilotSw.agentState.iterationCount < CopilotSw.CONFIG.MAX_REACT_ITERATIONS
+    ) {
       CopilotSw.agentState.iterationCount++;
       CopilotSw.updateAgentStatus('thinking', 'Reasoning about the next step.', true);
 
-      const lmmResponse = await CopilotSw.callLLM(goal, CopilotSw.agentState.pageContext, CopilotSw.agentState.chatHistory);
+      const llmResponse = await CopilotSw.callLLM(
+        goal,
+        CopilotSw.agentState.pageContext,
+        CopilotSw.agentState.chatHistory
+      );
+
       if (!CopilotSw.agentState.isRunning) break;
 
       CopilotSw.broadcastUI({
         action: 'updateReasoning',
-        thought: lmmResponse.thought,
-        actionName: lmmResponse.action,
-        actionInput: lmmResponse.action_input
+        thought: llmResponse.thought,
+        actionName: llmResponse.action,
+        actionInput: llmResponse.action_input
       });
 
-      if (lmmResponse.action === 'final_answer') {
+      if (llmResponse.action === 'final_answer') {
         CopilotSw.updateAgentStatus('finalizing', 'Wrapping up the final answer.', true);
+
         const recentTools = [];
         for (let i = CopilotSw.agentState.chatHistory.length - 1; i >= 0; i--) {
           const msg = CopilotSw.agentState.chatHistory[i];
@@ -173,26 +246,39 @@ CopilotSw.handleStartAgent = async function handleStartAgent(goal) {
 
         CopilotSw.agentState.chatHistory.push({
           role: 'assistant',
-          content: lmmResponse.answer,
-          thought: lmmResponse.thought,
+          content: llmResponse.answer,
+          thought: llmResponse.thought,
           toolsUsed: uniqueTools,
+          timestamp: Date.now()
+        });
+
+        continueLoop = false;
+        break;
+      }
+
+      CopilotSw.updateAgentStatus('acting', `Running tool: ${llmResponse.action}.`, true);
+
+      const toolResult = await CopilotSw.executeToolWithApproval(
+        llmResponse.action,
+        llmResponse.action_input,
+        tab.id
+      );
+
+      if (!CopilotSw.agentState.isRunning) break;
+
+      if (toolResult?.error && toolResult.error.includes('cancel')) {
+        CopilotSw.agentState.chatHistory.push({
+          role: 'assistant',
+          content: 'Action cancelled. Workflow stopped.',
           timestamp: Date.now()
         });
         continueLoop = false;
         break;
       }
 
-      CopilotSw.updateAgentStatus('acting', `Running tool: ${lmmResponse.action}.`, true);
-      const toolResult = await CopilotSw.executeToolWithApproval(
-        lmmResponse.action,
-        lmmResponse.action_input,
-        tab.id
-      );
-      if (!CopilotSw.agentState.isRunning) break;
-
       CopilotSw.agentState.chatHistory.push({
         role: 'tool',
-        toolName: lmmResponse.action,
+        toolName: llmResponse.action,
         content: toolResult,
         timestamp: Date.now()
       });
@@ -211,8 +297,16 @@ CopilotSw.handleStartAgent = async function handleStartAgent(goal) {
       });
     }
 
-    if (CopilotSw.agentState.isRunning && CopilotSw.agentState.iterationCount >= CopilotSw.CONFIG.MAX_REACT_ITERATIONS) {
-      const fallbackAnswer = formatFallbackAnswer(goal, CopilotSw.agentState.pageContext, CopilotSw.agentState.chatHistory);
+    if (
+      CopilotSw.agentState.isRunning &&
+      CopilotSw.agentState.iterationCount >= CopilotSw.CONFIG.MAX_REACT_ITERATIONS
+    ) {
+      const fallbackAnswer = formatFallbackAnswer(
+        goal,
+        CopilotSw.agentState.pageContext,
+        CopilotSw.agentState.chatHistory
+      );
+
       CopilotSw.agentState.chatHistory.push({
         role: 'assistant',
         content: fallbackAnswer,
@@ -235,4 +329,3 @@ CopilotSw.handleStartAgent = async function handleStartAgent(goal) {
     throw error;
   }
 };
-

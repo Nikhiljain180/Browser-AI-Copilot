@@ -1,20 +1,11 @@
-/**
- * Content Script - DOM Perception & Action Execution
- * Extracts Accessibility Tree and executes browser actions
- * Includes sanitization to prevent prompt injection attacks
- */
-
 const pageElementRegistry = new Map();
 
-// Sanitizer utility (loaded from sanitizer.js if available, fallback to inline basic sanitization)
 const ContentSanitizer = {
   sanitizeText: (text) => {
     if (!text) return '';
-    // If DOMPurify is available globally, use it; otherwise use fallback
     if (typeof DOMPurify !== 'undefined') {
       return DOMPurify.sanitize(String(text), { ALLOWED_TAGS: [] });
     }
-    // Fallback: escape dangerous characters
     return String(text)
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
@@ -30,7 +21,6 @@ const ContentSanitizer = {
         ALLOWED_ATTR: ['href', 'target', 'rel']
       });
     }
-    // Fallback: strip script/style tags
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = html;
     tempDiv.querySelectorAll('script, style, iframe').forEach(el => el.remove());
@@ -38,51 +28,37 @@ const ContentSanitizer = {
   }
 };
 
-// ============================================
-// Token Budget Management
-// ============================================
-
-/**
- * Estimate token count (rough: 1 token ≈ 4 characters)
- */
 function estimateTokens(text) {
   return Math.ceil((String(text || '').length) / 4);
 }
 
-/**
- * Apply token budget constraints to page context
- * Prioritizes: visible elements > buttons > links > text > sections
- * Max budget: 3000 tokens (configurable via MAX_PAGE_CONTEXT_TOKENS env)
- */
+// Trim accessibility tree to fit MAX_PAGE_CONTEXT_TOKENS.
 function applyTokenBudget(tree) {
   const maxTokens = window.__MAX_PAGE_CONTEXT_TOKENS__ || 3000;
   let currentTokens = 0;
 
-  // Estimate baseline (metadata)
   currentTokens += estimateTokens(tree.url);
   currentTokens += estimateTokens(tree.title);
 
   const budgets = {
-    buttons: Math.floor(maxTokens * 0.1),    // 10% for buttons
-    links: Math.floor(maxTokens * 0.15),     // 15% for links
-    elements: Math.floor(maxTokens * 0.2),   // 20% for interactive elements
-    text: Math.floor(maxTokens * 0.4),       // 40% for visible text
-    sections: Math.floor(maxTokens * 0.15)   // 15% for sections
+    buttons: Math.floor(maxTokens * 0.1),
+    links: Math.floor(maxTokens * 0.15),
+    elements: Math.floor(maxTokens * 0.2),
+    text: Math.floor(maxTokens * 0.4),
+    sections: Math.floor(maxTokens * 0.15)
   };
 
-  // Limit buttons (keep visible first)
   tree.buttons = tree.buttons
     .sort((a, b) => (b.visible ? 1 : -1) - (a.visible ? 1 : -1))
     .filter(btn => {
       const tokens = estimateTokens(btn.text);
-      if (currentTokens + tokens <= maxTokens) {
+      if (currentTokens + tokens <= budgets.buttons) {
         currentTokens += tokens;
         return true;
       }
       return false;
     });
 
-  // Limit links
   tree.links = tree.links
     .filter(link => {
       const tokens = estimateTokens(link.text + link.href);
@@ -97,7 +73,6 @@ function applyTokenBudget(tree) {
       tree._linksExceeded = true;
     }
 
-  // Limit elements (keep visible first)
   tree.elements = tree.elements
     .sort((a, b) => (b.visible ? 1 : -1) - (a.visible ? 1 : -1))
     .filter(el => {
@@ -109,16 +84,14 @@ function applyTokenBudget(tree) {
       return false;
     });
 
-  // Limit text content
   const textTokens = estimateTokens(tree.textContent);
   if (textTokens > budgets.text) {
-    const maxChars = budgets.text * 4; // Reverse estimate
+    const maxChars = budgets.text * 4;
     tree.textContent = tree.textContent.substring(0, maxChars) + '\n[... text truncated for token budget]';
     tree._textTruncated = true;
   }
   currentTokens += estimateTokens(tree.textContent);
 
-  // Limit sections
   tree.sections = tree.sections.filter(section => {
     const tokens = estimateTokens(section.title + section.text);
     if (currentTokens + tokens <= budgets.sections) {
@@ -132,7 +105,6 @@ function applyTokenBudget(tree) {
     tree._sectionsExceeded = true;
   }
 
-  // Store budget info for debugging
   tree._tokenInfo = {
     estimated: currentTokens,
     maxBudget: maxTokens,
@@ -141,10 +113,6 @@ function applyTokenBudget(tree) {
 
   return tree;
 }
-
-// ============================================
-// Message Listener
-// ============================================
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   try {
@@ -155,17 +123,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       executeTool(request.toolName, request.toolInput).then(sendResponse).catch(err => {
         sendResponse({ error: err.message });
       });
-      return true; // Async response
+      return true; // keep the message channel open for async sendResponse
     }
   } catch (error) {
     console.error('Content script error:', error);
     sendResponse({ error: error.message });
   }
 });
-
-// ============================================
-// Accessibility Tree Extraction
-// ============================================
 
 function extractAccessibilityTree(focusArea = null) {
   pageElementRegistry.clear();
@@ -190,17 +154,14 @@ function extractAccessibilityTree(focusArea = null) {
     sections: []
   };
 
-  // Extract key interactive elements
   extractInteractiveElements(tree, focusArea);
   extractForms(tree);
   extractTables(tree);
   extractLinks(tree);
   extractTextContent(tree);
 
-  // Set up MutationObserver for dynamic content
   observeDOMChanges();
 
-  // Apply token budget constraints to keep LLM context window manageable
   const budgetedTree = applyTokenBudget(tree);
 
   return budgetedTree;
@@ -241,7 +202,6 @@ function extractInteractiveElements(tree, focusArea) {
 
     tree.elements.push(elementData);
 
-    // Categorize
     if (el.tagName === 'BUTTON') tree.buttons.push(elementData);
     if (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)) tree.inputs.push(elementData);
   });
@@ -261,7 +221,6 @@ function extractForms(tree) {
       requiredUnfilledFields: []
     };
 
-    // Extract form fields
     form.querySelectorAll('input, textarea, select').forEach((field, fieldIdx) => {
       formData.fields.push({
         agentId: registerElement(`${formData.id}_field_${fieldIdx}`, field),
@@ -382,19 +341,18 @@ function extractTables(tree) {
       rows: []
     };
 
-    // Extract headers
     table.querySelectorAll('thead th, thead td').forEach(th => {
-      tableData.headers.push(th.innerText);
+      tableData.headers.push(ContentSanitizer.sanitizeText(th.innerText || ''));
     });
 
-    // Extract first 5 rows (truncate for token budget)
+    // cap at 5 rows for token budget
     const rows = table.querySelectorAll('tbody tr');
     const displayRows = Math.min(rows.length, 5);
 
     for (let i = 0; i < displayRows; i++) {
       const rowCells = [];
       rows[i].querySelectorAll('td').forEach(cell => {
-        rowCells.push(cell.innerText);
+        rowCells.push(ContentSanitizer.sanitizeText(cell.innerText || ''));
       });
       tableData.rows.push(rowCells);
     }
@@ -458,10 +416,6 @@ function extractSectionSummaries(root) {
 
   return results;
 }
-
-// ============================================
-// Selector Generation (Stable & Unique)
-// ============================================
 
 function generateSelector(element) {
   if (!element) return '';
@@ -527,10 +481,6 @@ function resolveElement({ agentId, agent_id, selector }) {
   return null;
 }
 
-// ============================================
-// Tool Execution
-// ============================================
-
 async function executeTool(toolName, toolInput) {
   switch (toolName) {
     case 'read_page':
@@ -567,7 +517,6 @@ function clickElement(target, description) {
       element.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
-    // Synthetic click that works with frameworks
     element.focus();
     element.click();
 
@@ -582,6 +531,25 @@ function clickElement(target, description) {
   }
 }
 
+// React tracks value via the prototype setter; bypassing it makes React revert the change.
+function setNativeValue(element, value) {
+  const proto = Object.getPrototypeOf(element);
+  const protoDescriptor = proto && Object.getOwnPropertyDescriptor(proto, 'value');
+  const ownDescriptor = Object.getOwnPropertyDescriptor(element, 'value');
+
+  if (ownDescriptor && protoDescriptor && ownDescriptor.set !== protoDescriptor.set) {
+    protoDescriptor.set.call(element, value);
+    return;
+  }
+
+  if (protoDescriptor && protoDescriptor.set) {
+    protoDescriptor.set.call(element, value);
+    return;
+  }
+
+  element.value = value;
+}
+
 function fillInput(target, value) {
   try {
     const element = resolveElement(target);
@@ -589,14 +557,11 @@ function fillInput(target, value) {
       return { error: `Input not found: ${target?.agentId || target?.selector || 'unknown target'}` };
     }
 
-    // Set value and trigger change event (React, Vue, Angular compatible)
-    element.value = value;
+    element.focus();
+    setNativeValue(element, value);
 
-    const inputEvent = new Event('input', { bubbles: true });
-    const changeEvent = new Event('change', { bubbles: true });
-
-    element.dispatchEvent(inputEvent);
-    element.dispatchEvent(changeEvent);
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+    element.dispatchEvent(new Event('change', { bubbles: true }));
 
     return {
       success: true,
@@ -618,7 +583,6 @@ function extractData(target, schema = null) {
       return { error: target ? `Target not found: ${target}` : 'No structured data target found on the page' };
     }
 
-    // Extract table or list data
     const data = [];
 
     if (targetElement.tagName === 'TABLE') {
@@ -632,18 +596,20 @@ function extractData(target, schema = null) {
         const rowData = {};
         cells.forEach((cell, idx) => {
           const header = headers[idx] || `col_${idx}`;
-          rowData[normalizeDataKey(header)] = cell.innerText.trim();
+          rowData[normalizeDataKey(header)] = ContentSanitizer.sanitizeText(cell.innerText || '');
         });
         data.push(rowData);
       });
     } else {
-      // Extract list items
+      // text-only by default; opt in via schema.includeHtml
       const items = targetElement.querySelectorAll('li, .item, [data-item]');
+      const includeHtml = schema && schema.includeHtml === true;
       items.forEach(item => {
-        data.push({
-          text: item.innerText,
-          html: item.innerHTML
-        });
+        const entry = { text: ContentSanitizer.sanitizeText(item.innerText || '') };
+        if (includeHtml) {
+          entry.html = ContentSanitizer.sanitizeHTML(item.innerHTML || '');
+        }
+        data.push(entry);
       });
     }
 
@@ -682,12 +648,10 @@ function draftReply(toolInput = {}) {
     const draftText = providedDraft || buildFallbackDraftReply(context, tone);
 
     element.focus();
-    element.value = draftText;
+    setNativeValue(element, draftText);
 
-    const inputEvent = new Event('input', { bubbles: true });
-    const changeEvent = new Event('change', { bubbles: true });
-    element.dispatchEvent(inputEvent);
-    element.dispatchEvent(changeEvent);
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+    element.dispatchEvent(new Event('change', { bubbles: true }));
 
     return {
       success: true,
@@ -733,18 +697,10 @@ function summarizePage(maxLength = 200) {
   }
 }
 
-// ============================================
-// Utilities
-// ============================================
-
 function isElementVisible(element) {
   const rect = element.getBoundingClientRect();
   return rect.width > 0 && rect.height > 0 && window.getComputedStyle(element).display !== 'none';
 }
-
-// ============================================
-// Dynamic Content Observer
-// ============================================
 
 let mutationObserver = null;
 let lastPageSignature = '';
@@ -802,13 +758,9 @@ function installNavigationHooks() {
 }
 
 function observeDOMChanges() {
-  if (mutationObserver) return; // Already observing
+  if (mutationObserver) return;
 
-  const observer = new MutationObserver((mutations) => {
-    console.log('[Content Script] DOM changed - Ready for re-extraction');
-    // Service Worker will re-trigger perception if needed
-    schedulePageContextChanged('mutation');
-  });
+  const observer = new MutationObserver(() => schedulePageContextChanged('mutation'));
 
   observer.observe(document.documentElement, {
     childList: true,
@@ -822,5 +774,3 @@ function observeDOMChanges() {
 
 installNavigationHooks();
 notifyPageContextChanged('initial');
-
-console.log('✓ Content script loaded - Page perception ready');

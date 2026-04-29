@@ -1,8 +1,3 @@
-/**
- * Node.js Express Backend - LLM API Gateway
- * Stateless proxy for handling LLM streaming and API key management
- */
-
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
@@ -13,22 +8,13 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const app = express();
 
-// ============================================
-// Middleware
-// ============================================
-
 app.use(cors());
 app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 
-// ============================================
-// Constants
-// ============================================
-
 const PORT = process.env.PROXY_PORT || 3000;
 const HOST = process.env.PROXY_HOST || '127.0.0.1';
 
-// System prompt for the agent
 const SYSTEM_PROMPT = `You are a Browser AI Copilot - an autonomous agent that reasons about web pages and takes actions.
 
 Your response MUST be valid JSON matching this schema:
@@ -101,10 +87,6 @@ Rules:
 - Never include delete, purchase, or unrelated destructive actions.
 - Return JSON only.`;
 
-// ============================================
-// LLM Initialization
-// ============================================
-
 let llmClient = null;
 
 function getLLMProvider() {
@@ -168,14 +150,6 @@ function initializeLLM(provider = getLLMProvider()) {
   }
 }
 
-// ============================================
-// Routes
-// ============================================
-
-/**
- * POST /api/llm/stream
- * Main LLM endpoint for agent thinking
- */
 app.post('/api/llm/stream', async (req, res) => {
   try {
     const { goal, pageContext, chatHistory } = req.body;
@@ -187,7 +161,6 @@ app.post('/api/llm/stream', async (req, res) => {
       return res.status(400).json({ error: 'goal is required' });
     }
 
-    // Build conversation context
     const messages = buildConversationMessages(goal, pageContext, chatHistory);
 
     console.log(`[LLM] Provider: ${provider}, Model: ${model}`);
@@ -212,10 +185,6 @@ app.post('/api/llm/stream', async (req, res) => {
   }
 });
 
-/**
- * POST /api/llm/retry
- * Retry endpoint for failed parses
- */
 app.post('/api/llm/retry', async (req, res) => {
   try {
     const { goal, pageContext, chatHistory } = req.body;
@@ -276,10 +245,6 @@ app.post('/api/forms/plan', async (req, res) => {
   }
 });
 
-/**
- * GET /api/health
- * Health check endpoint
- */
 app.get('/api/health', (req, res) => {
   return res.json({
     status: 'ok',
@@ -289,10 +254,6 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-/**
- * POST /api/config/update
- * Update LLM configuration at runtime
- */
 app.post('/api/config/update', (req, res) => {
   const { provider, model } = req.body;
 
@@ -316,10 +277,6 @@ app.post('/api/config/update', (req, res) => {
   });
 });
 
-// ============================================
-// Helper Functions
-// ============================================
-
 function buildConversationMessages(goal, pageContext, chatHistory = []) {
   const messages = [
     {
@@ -330,7 +287,7 @@ function buildConversationMessages(goal, pageContext, chatHistory = []) {
 
   const queryType = inferQueryType(goal);
 
-  // Add conversation history (sliding window: last 10 messages)
+  // sliding window over the last 10 turns keeps the prompt size predictable
   const recentHistory = chatHistory.slice(-10);
   recentHistory.forEach(msg => {
     if (msg.role !== 'tool') {
@@ -339,7 +296,6 @@ function buildConversationMessages(goal, pageContext, chatHistory = []) {
         content: normalizeMessageContent(msg.content)
       });
     } else {
-      // Tool results as user messages for context
       messages.push({
         role: 'user',
         content: `Tool ${msg.toolName} result: ${JSON.stringify(msg.content)}`
@@ -347,7 +303,6 @@ function buildConversationMessages(goal, pageContext, chatHistory = []) {
     }
   });
 
-  // Add current page context
   const contextSummary = summarizePageContext(pageContext);
   messages.push({
     role: 'user',
@@ -360,7 +315,6 @@ function buildConversationMessages(goal, pageContext, chatHistory = []) {
 function inferQueryType(goal) {
   const text = String(goal || '').toLowerCase();
 
-  // Clearly action-oriented verbs/requests.
   const actionSignals = [
     'click',
     'tap',
@@ -395,7 +349,6 @@ function inferQueryType(goal) {
     return 'action';
   }
 
-  // Default to informational: summarize, explain, compare, recommend, Q&A about the page.
   return 'informational';
 }
 
@@ -576,10 +529,6 @@ async function callLLMWithTimeout(messages, timeoutMs, options = {}) {
   }
 }
 
-// ============================================
-// Error Handling
-// ============================================
-
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err);
   res.status(500).json({
@@ -588,38 +537,25 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ============================================
-// Server Startup
-// ============================================
-
 async function start() {
   try {
     try {
       initializeLLM();
-      console.log(`✓ LLM Provider initialized: ${getLLMProvider()}`);
+      console.log(`LLM provider initialized: ${getLLMProvider()}`);
     } catch (initError) {
-      console.warn(`⚠️ LLM provider not initialized: ${initError.message}`);
+      console.warn(`LLM provider not initialized: ${initError.message}`);
     }
 
     app.listen(PORT, HOST, () => {
-      console.log(`
-╔════════════════════════════════════════════════╗
-║  Browser AI Copilot Backend                    ║
-║  Listening on port ${PORT}                       ║
-║  Host: ${HOST}                                   ║
-║  Provider: ${getLLMProvider()}                              ║
-║  Model: ${getLLMModel()}                                 ║
-╚════════════════════════════════════════════════╝
-      `);
+      console.log(`Browser AI Copilot backend listening on http://${HOST}:${PORT} (provider=${getLLMProvider()}, model=${getLLMModel()})`);
     });
 
   } catch (error) {
-    console.error('❌ Failed to start server:', error.message);
+    console.error('Failed to start server:', error.message);
     process.exit(1);
   }
 }
 
-// Start server only if this is the main module
 if (require.main === module) {
   start();
 }

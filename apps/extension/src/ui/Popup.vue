@@ -366,6 +366,11 @@ const approvalRiskLabel = computed(() => {
 const approvalHeadline = computed(() => {
   if (!approvalRequest.value) return '';
 
+  const explicit = String(approvalRequest.value.actionDescription || '').trim();
+  if (explicit) {
+    return explicit.replace(/\s+/g, ' ');
+  }
+
   const description = String(approvalRequest.value.toolInput?.description || '').trim();
   if (description) {
     return description.replace(/\s+/g, ' ');
@@ -775,13 +780,8 @@ function startHealthCheckPolling() {
     clearInterval(healthCheckIntervalId);
   }
 
-  // Check immediately on start
   checkBackendHealth();
-
-  // Then check every 30 seconds
-  healthCheckIntervalId = setInterval(() => {
-    checkBackendHealth();
-  }, 30000);
+  healthCheckIntervalId = setInterval(checkBackendHealth, 30000);
 }
 
 /**
@@ -864,7 +864,8 @@ function handleRuntimeMessage(message) {
       id: message.approvalId,
       toolName: message.toolName,
       toolInput: message.toolInput,
-      riskLevel: message.riskLevel,
+      riskLevel: message.riskLevel || 'medium',
+      actionDescription: message.actionDescription || '',
     };
     phase.value = 'acting';
     phaseDetail.value = 'Waiting for your approval to continue.';
