@@ -29,7 +29,6 @@
         "src/content/tools/click_element.js",
         "src/content/tools/fill_input.js",
         "src/content/tools/extract_data.js",
-        "src/content/tools/draft_reply.js",
         "src/content/tools/summarize_page.js",
         "src/content/content-script.js"
       ],
