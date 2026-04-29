@@ -243,8 +243,12 @@ CopilotSw.callLLM = async function callLLM(goal, pageContext, chatHistory) {
 
     return parsed;
   } catch (error) {
-    if (error.name === 'AbortError' && !CopilotSw.agentState.isRunning) {
-      throw new Error('Agent stopped by user');
+    if (error.name === 'AbortError') {
+      if (!CopilotSw.agentState.isRunning) {
+        throw new Error('Agent stopped by user');
+      } else {
+        throw new Error('The request timed out because the page is too large or the model is slow. Please try again.');
+      }
     }
     throw error;
   } finally {

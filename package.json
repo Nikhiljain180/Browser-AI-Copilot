@@ -21,6 +21,7 @@
     "format": "prettier --write \"apps/**/*.{js,vue,ts,json,md}\""
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "concurrently": "^8.2.0",
     "eslint": "^8.56.0",
     "jsdom": "^29.1.0",

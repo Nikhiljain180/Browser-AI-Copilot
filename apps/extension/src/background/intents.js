@@ -51,10 +51,16 @@ CopilotSw.isFormSubmitGoal = function isFormSubmitGoal(goal) {
 CopilotSw.wasRecentFormFillConversation = function wasRecentFormFillConversation(chatHistory = []) {
   const recentMessages = chatHistory.slice(-6);
   return recentMessages.some(message => {
+    if (message.role === 'user') return false;
     const content = String(message?.content || '').toLowerCase();
     return content.includes('filled the form') ||
       content.includes('sample data') ||
-      content.includes('different set of sample values');
+      content.includes('different set of sample values') ||
+      content.includes('what is your name') ||
+      content.includes('what is your email') ||
+      content.includes('required detail') ||
+      content.includes('i need a bit more information') ||
+      content.includes('missing');
   });
 };
 

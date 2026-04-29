@@ -11,7 +11,7 @@
 const { defineConfig, devices } = require('@playwright/test');
 
 module.exports = defineConfig({
-  testDir: './tests/e2e',
+  testDir: '.',
   fullyParallel: false, // Disable parallel to maintain service worker state
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

@@ -1,140 +1,137 @@
-/**
- * Playwright E2E Tests for Browser AI Copilot
- * 
- * Scenario 1: Single-step summarization
- * Scenario 2: Multi-step workflow
- * Scenario 3: HITL approval gate
- */
-
-const { test, expect } = require('@playwright/test');
+const { test, expect, chromium } = require('@playwright/test');
+const path = require('path');
 
 test.describe('Browser AI Copilot E2E Tests', () => {
-  let page;
+  let context;
   let extensionId;
 
   test.beforeAll(async () => {
-    // Note: In production, you'd need to:
-    // 1. Load the extension into Chrome
-    // 2. Get the extension ID
-    // 3. Pass it to tests
-    
-    // For this test structure, we're showing the testing approach
-    extensionId = 'placeholder-extension-id';
+    // 1. Load the extension into Chrome using launchPersistentContext
+    const extensionPath = path.resolve(__dirname, '../../apps/extension');
+    context = await chromium.launchPersistentContext('', {
+      headless: false, // Chrome extensions only run in headful mode
+      args: [
+        `--disable-extensions-except=${extensionPath}`,
+        `--load-extension=${extensionPath}`,
+      ],
+    });
+
+    // 2. Get the extension ID from the service worker target
+    let [background] = context.serviceWorkers();
+    if (!background) {
+      background = await context.waitForEvent('serviceworker');
+    }
+    const extensionUri = background.url();
+    extensionId = extensionUri.split('/')[2];
   });
 
-  test('Scenario 1: Single-step summarization', async ({ browser }) => {
-    // SETUP: Open fixture page
-    const context = await browser.newContext();
-    page = await context.newPage();
+  test.afterAll(async () => {
+    await context.close();
+  });
+
+  test('Scenario 1: Single-step summarization', async () => {
+    // SETUP: Open fixture page via intercepted HTTP to avoid file:// extension restrictions
+    const page = await context.newPage();
+    const fixturePath = path.resolve(__dirname, '../fixtures/ecommerce.html');
+    await page.route('http://ecommerce.local/', route => route.fulfill({ path: fixturePath }));
+    await page.goto('http://ecommerce.local/');
     
-    // Load test fixture
-    await page.goto('file:///path/to/tests/fixtures/ecommerce.html');
-    
-    // SETUP: Open AI Copilot extension
-    // In real test, would navigate to chrome-extension://ID/popup.html
-    // For this example, we show the test structure
+    // SETUP: Open AI Copilot extension popup in a new tab for testing
+    const popupPage = await context.newPage();
+    await popupPage.goto(`chrome-extension://${extensionId}/public/popup.html`);
     
     // TEST: Send summarization request
-    // await page.fill('[data-testid="chat-input"]', 'Summarize this page');
-    // await page.click('[data-testid="send-button"]');
+    await popupPage.fill('textarea, input[type="text"]', 'Summarize this page');
+    await page.bringToFront(); // Ensure fixture is the active tab for the extension
+    await popupPage.click('button:has-text("Send"), button[type="submit"]');
     
-    // VERIFY: Chat shows summary
-    // await expect(page.locator('[data-testid="chat-message"]')).toContainText('products');
+    // VERIFY: Chat shows summary (wait for network/LLM delay)
+    await expect(popupPage.locator('.chat-message, [data-testid="chat-message"]').last()).toContainText('products', { timeout: 15000 });
     
-    // VERIFY: Reasoning window shows read_page action
-    // await expect(page.locator('[data-testid="reasoning-action"]')).toContainText('read_page');
-    
-    // VERIFY: Chat has tool badge
-    // await expect(page.locator('[data-testid="tool-badge"]')).toContainText('read_page');
-    
-    await context.close();
+    await page.close();
+    await popupPage.close();
   });
 
-  test('Scenario 2: Multi-step workflow', async ({ browser }) => {
+  test('Scenario 2: Multi-step workflow', async () => {
     // SETUP: Open fixture page
-    const context = await browser.newContext();
-    page = await context.newPage();
+    const page = await context.newPage();
+    const fixturePath = path.resolve(__dirname, '../fixtures/ecommerce.html');
+    await page.route('http://ecommerce.local/', route => route.fulfill({ path: fixturePath }));
+    await page.goto('http://ecommerce.local/');
     
-    await page.goto('file:///path/to/tests/fixtures/ecommerce.html');
+    const popupPage = await context.newPage();
+    await popupPage.goto(`chrome-extension://${extensionId}/public/popup.html`);
     
     // TEST: Send multi-step request
-    // const request = 'Find the most expensive product and extract its details';
-    // await page.fill('[data-testid="chat-input"]', request);
-    // await page.click('[data-testid="send-button"]');
-    
-    // VERIFY: Agent goes through multiple iterations
-    // Iteration 1: read_page
-    // await expect(page.locator('[data-testid="reasoning-action"]')).toContainText('read_page');
-    
-    // Wait for iteration 2
-    // await page.waitForTimeout(3000);
-    
-    // Iteration 2: click_element
-    // const clickAction = page.locator('[data-testid="reasoning-action"]');
-    // await expect(clickAction).toContainText('click_element');
+    const request = 'Find the most expensive product and extract its details';
+    await popupPage.fill('textarea, input[type="text"]', request);
+    await page.bringToFront();
+    await popupPage.click('button:has-text("Send"), button[type="submit"]');
     
     // VERIFY: Final result contains extracted product data
-    // const lastMessage = page.locator('[data-testid="chat-message"]').last();
-    // await expect(lastMessage).toContainText('4K Monitor');
-    // await expect(lastMessage).toContainText('$599.99');
+    const lastMessage = popupPage.locator('.chat-message, [data-testid="chat-message"]').last();
+    await expect(lastMessage).toContainText('4K Monitor', { timeout: 25000 });
+    await expect(lastMessage).toContainText('$599.99');
     
-    await context.close();
+    await page.close();
+    await popupPage.close();
   });
 
-  test('Scenario 3: HITL approval gate', async ({ browser }) => {
+  test('Scenario 3: HITL approval gate', async () => {
     // SETUP: Open fixture page
-    const context = await browser.newContext();
-    page = await context.newPage();
+    const page = await context.newPage();
+    const fixturePath = path.resolve(__dirname, '../fixtures/ecommerce.html');
+    await page.route('http://ecommerce.local/', route => route.fulfill({ path: fixturePath }));
+    await page.goto('http://ecommerce.local/');
     
-    await page.goto('file:///path/to/tests/fixtures/ecommerce.html');
+    const popupPage = await context.newPage();
+    await popupPage.goto(`chrome-extension://${extensionId}/public/popup.html`);
     
     // TEST: Send request that requires approval
-    // const request = 'Fill the contact form and submit it';
-    // await page.fill('[data-testid="chat-input"]', request);
-    // await page.click('[data-testid="send-button"]');
+    const request = 'Fill the contact form and submit it';
+    await popupPage.fill('textarea, input[type="text"]', request);
+    await page.bringToFront();
+    await popupPage.click('button:has-text("Send"), button[type="submit"]');
     
-    // VERIFY: Agent fills non-destructive fields
-    // await expect(page.locator('input[name="name"]')).toHaveValue(/Sample/);
+    // VERIFY: Agent fills non-destructive fields on the main page
+    await expect(page.locator('input[name="name"]')).toHaveValue(/./, { timeout: 15000 });
     
-    // VERIFY: Approval modal appears for destructive action (submit)
-    // await expect(page.locator('[data-testid="approval-modal"]')).toBeVisible();
-    // await expect(page.locator('[data-testid="approval-modal"]')).toContainText('HIGH RISK');
-    // await expect(page.locator('[data-testid="approval-modal"]')).toContainText('submit');
+    // VERIFY: Approval modal appears in the popup
+    const approvalModal = popupPage.locator('.modal, [data-testid="approval-modal"]');
+    await expect(approvalModal).toBeVisible({ timeout: 15000 });
+    await expect(approvalModal).toContainText('submit');
     
-    // TEST: User rejects approval
-    // await page.click('[data-testid="approve-button"]');
-    // Wait for form submission
-    // await page.waitForTimeout(1000);
+    // TEST: User approves action
+    await popupPage.click('button:has-text("Approve"), [data-testid="approve-button"]');
     
     // VERIFY: Chat shows success
-    // await expect(page.locator('[data-testid="chat-message"]').last()).toContainText('submitted');
+    await expect(popupPage.locator('.chat-message, [data-testid="chat-message"]').last()).toContainText('submitted', { timeout: 10000 });
     
-    await context.close();
+    await page.close();
+    await popupPage.close();
   });
 
-  test('Scenario 4: Error recovery', async ({ browser }) => {
+  test('Scenario 4: Error recovery', async () => {
     // SETUP: Open fixture page
-    const context = await browser.newContext();
-    page = await context.newPage();
+    const page = await context.newPage();
+    const fixturePath = path.resolve(__dirname, '../fixtures/ecommerce.html');
+    await page.route('http://ecommerce.local/', route => route.fulfill({ path: fixturePath }));
+    await page.goto('http://ecommerce.local/');
     
-    await page.goto('file:///path/to/tests/fixtures/ecommerce.html');
+    const popupPage = await context.newPage();
+    await popupPage.goto(`chrome-extension://${extensionId}/public/popup.html`);
     
     // TEST: Request agent to click non-existent element
-    // const request = 'Click the button with id "nonexistent"';
-    // await page.fill('[data-testid="chat-input"]', request);
-    // await page.click('[data-testid="send-button"]');
-    
-    // VERIFY: Agent attempts action
-    // await expect(page.locator('[data-testid="reasoning-action"]')).toContainText('click_element');
+    const request = 'Click the button with id "nonexistent"';
+    await popupPage.fill('textarea, input[type="text"]', request);
+    await page.bringToFront();
+    await popupPage.click('button:has-text("Send"), button[type="submit"]');
     
     // VERIFY: Error is reported clearly
-    // await expect(page.locator('[data-testid="chat-message"]').last())
-    //   .toContainText('not found');
+    await expect(popupPage.locator('.chat-message, [data-testid="chat-message"]').last()).toContainText('not found', { timeout: 20000 });
     
-    // VERIFY: No modal shown (error, not approval)
-    // await expect(page.locator('[data-testid="approval-modal"]')).not.toBeVisible();
-    
-    await context.close();
+    await page.close();
+    await popupPage.close();
   });
 });
 
