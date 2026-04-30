@@ -1,6 +1,11 @@
 module.exports = {
-  rootDir: '../..',
+  rootDir: '.',
   testEnvironment: 'node',
-  testMatch: ['<rootDir>/tests/integration/**/*.test.js'],
-  testPathIgnorePatterns: ['/node_modules/'],
+  preset: 'ts-jest',
+  testMatch: [
+    '<rootDir>/tests/**/*.test.ts',
+    '<rootDir>/tests/**/*.test.js',
+  ],
+  testPathIgnorePatterns: ['/node_modules/', '/dist/'],
+  moduleFileExtensions: ['ts', 'js', 'json'],
 };
