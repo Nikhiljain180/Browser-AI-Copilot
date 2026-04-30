@@ -1,41 +1,25 @@
 /* global CopilotSw */
 
+// ─────────────────────────────────────────────────────────────────────────────
+// QUERY TYPE INFERENCE
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ACTION_SIGNALS = [
+  'click', 'tap', 'press', 'scroll', 'navigate', 'open', 'go to',
+  'fill', 'type', 'enter', 'submit', 'apply', 'sign in', 'login',
+  'log in', 'download', 'upload', 'extract', 'copy', 'paste',
+  'select', 'choose', 'search for', 'find and click',
+  'book', 'buy', 'purchase',
+];
+
 function inferQueryType(goal) {
   const text = String(goal || '').toLowerCase();
-
-  const actionSignals = [
-    'click',
-    'tap',
-    'press',
-    'scroll',
-    'navigate',
-    'open',
-    'go to',
-    'fill',
-    'type',
-    'enter',
-    'submit',
-    'apply',
-    'sign in',
-    'login',
-    'log in',
-    'download',
-    'upload',
-    'extract',
-    'copy',
-    'paste',
-    'select',
-    'choose',
-    'search for',
-    'find and click',
-    'book',
-    'buy',
-    'purchase',
-  ];
-
-  if (actionSignals.some(signal => text.includes(signal))) return 'action';
-  return 'informational';
+  return ACTION_SIGNALS.some(signal => text.includes(signal)) ? 'action' : 'informational';
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PAGE CONTEXT FOCUSING
+// ─────────────────────────────────────────────────────────────────────────────
 
 function tokenize(text) {
   return String(text || '')
@@ -51,7 +35,6 @@ function scoreSection(section, goalTokens) {
   for (const token of goalTokens) {
     if (haystack.includes(token)) score += 1;
   }
-  // Small bias towards titled sections.
   if (section?.title) score += 2;
   return score;
 }
@@ -61,7 +44,9 @@ function pickRelevantSections(goal, pageContext, maxSections = 6) {
   if (sections.length === 0) return [];
 
   const goalTokens = tokenize(goal);
-  if (goalTokens.length === 0) return sections.slice(0, Math.min(maxSections, sections.length));
+  if (goalTokens.length === 0) {
+    return sections.slice(0, Math.min(maxSections, sections.length));
+  }
 
   return [...sections]
     .map(section => ({ section, score: scoreSection(section, goalTokens) }))
@@ -74,15 +59,12 @@ function pickRelevantSections(goal, pageContext, maxSections = 6) {
 function clampText(text, maxChars) {
   const normalized = String(text || '');
   if (!maxChars || maxChars <= 0) return normalized;
-  if (normalized.length <= maxChars) return normalized;
-  return normalized.slice(0, maxChars);
+  return normalized.length <= maxChars ? normalized : normalized.slice(0, maxChars);
 }
 
 function buildFocusedPageContext(goal, pageContext) {
   if (!pageContext || typeof pageContext !== 'object') return pageContext;
-
-  const queryType = inferQueryType(goal);
-  if (queryType !== 'informational') return pageContext;
+  if (inferQueryType(goal) !== 'informational') return pageContext;
 
   const maxChars = Number.isFinite(CopilotSw?.CONFIG?.MAX_PAGE_CONTEXT_CHARS)
     ? CopilotSw.CONFIG.MAX_PAGE_CONTEXT_CHARS
@@ -108,6 +90,10 @@ function buildFocusedPageContext(goal, pageContext) {
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// JSON PARSING & VALIDATION
+// ─────────────────────────────────────────────────────────────────────────────
+
 function extractFirstJsonObject(text) {
   const source = String(text || '');
   const firstBrace = source.indexOf('{');
@@ -121,25 +107,13 @@ function extractFirstJsonObject(text) {
     const char = source[index];
 
     if (inString) {
-      if (isEscaped) {
-        isEscaped = false;
-        continue;
-      }
-      if (char === '\\') {
-        isEscaped = true;
-        continue;
-      }
-      if (char === '"') {
-        inString = false;
-      }
+      if (isEscaped) { isEscaped = false; continue; }
+      if (char === '\\') { isEscaped = true; continue; }
+      if (char === '"') { inString = false; }
       continue;
     }
 
-    if (char === '"') {
-      inString = true;
-      continue;
-    }
-
+    if (char === '"') { inString = true; continue; }
     if (char === '{') depth += 1;
     if (char === '}') depth -= 1;
 
@@ -166,31 +140,68 @@ function validateStructuredResponse(payload) {
   if (!action.trim()) return null;
 
   if (action === 'final_answer') {
-    const answerOk = typeof answer === 'string' ||
+    const isValidAnswer =
+      typeof answer === 'string' ||
       (Array.isArray(answer) && answer.every(item => typeof item === 'string'));
-    if (!answerOk) return null;
+    if (!isValidAnswer) return null;
   }
 
   return {
     thought,
     action,
     action_input: actionInput,
-    answer: answer ?? null
+    answer: answer ?? null,
   };
 }
 
 function parseStructuredResponse(content) {
+  // Try direct parse first
   try {
     return validateStructuredResponse(JSON.parse(content));
+  } catch { /* not valid JSON directly */ }
+
+  // Try extracting JSON from markdown/text wrapping
+  const extracted = extractFirstJsonObject(content);
+  if (!extracted) return null;
+
+  try {
+    return validateStructuredResponse(JSON.parse(extracted));
   } catch {
-    const extracted = extractFirstJsonObject(content);
-    if (!extracted) return null;
-    try {
-      return validateStructuredResponse(JSON.parse(extracted));
-    } catch {
-      return null;
-    }
+    return null;
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LLM API CALL
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function fetchLLM(endpoint, payload, signal) {
+  const response = await fetch(`${CopilotSw.CONFIG.BACKEND_URL}${endpoint}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal,
+  });
+
+  if (!response.ok) {
+    let errorMessage = `LLM API error: ${response.statusText}`;
+    try {
+      const errorData = await response.json();
+      errorMessage = errorData.error || errorData.message || errorMessage;
+    } catch { /* ignore parse error */ }
+    throw new Error(errorMessage);
+  }
+
+  return response.json();
+}
+
+function buildAbortError() {
+  if (!CopilotSw.agentState.isRunning) {
+    return new Error('Agent stopped by user');
+  }
+  return new Error(
+    'The request timed out because the page is too large or the model is slow. Please try again.'
+  );
 }
 
 CopilotSw.callLLM = async function callLLM(goal, pageContext, chatHistory) {
@@ -201,39 +212,15 @@ CopilotSw.callLLM = async function callLLM(goal, pageContext, chatHistory) {
   try {
     const focusedPageContext = buildFocusedPageContext(goal, pageContext);
 
-    const response = await fetch(`${CopilotSw.CONFIG.BACKEND_URL}/api/llm/stream`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        goal,
-        pageContext: focusedPageContext,
-        chatHistory
-      }),
-      signal: controller.signal
-    });
+    const payload = { goal, pageContext: focusedPageContext, chatHistory };
 
-    if (!response.ok) {
-      let errorMessage = `LLM API error: ${response.statusText}`;
-      try {
-        const errorData = await response.json();
-        errorMessage = errorData.error || errorData.message || errorMessage;
-      } catch {
-        // ignore
-      }
-      throw new Error(errorMessage);
-    }
-
-    const data = await response.json();
+    // ── First attempt ──
+    const data = await fetchLLM('/api/llm/stream', payload, controller.signal);
     let parsed = parseStructuredResponse(data.content);
 
+    // ── Retry if parse failed ──
     if (!parsed) {
-      const retryResponse = await fetch(`${CopilotSw.CONFIG.BACKEND_URL}/api/llm/retry`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ goal, pageContext, chatHistory }),
-        signal: controller.signal
-      });
-      const retryData = await retryResponse.json();
+      const retryData = await fetchLLM('/api/llm/retry', payload, controller.signal);
       parsed = parseStructuredResponse(retryData.content);
     }
 
@@ -244,11 +231,7 @@ CopilotSw.callLLM = async function callLLM(goal, pageContext, chatHistory) {
     return parsed;
   } catch (error) {
     if (error.name === 'AbortError') {
-      if (!CopilotSw.agentState.isRunning) {
-        throw new Error('Agent stopped by user');
-      } else {
-        throw new Error('The request timed out because the page is too large or the model is slow. Please try again.');
-      }
+      throw buildAbortError();
     }
     throw error;
   } finally {

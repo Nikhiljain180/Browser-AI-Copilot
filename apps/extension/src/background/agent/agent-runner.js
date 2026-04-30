@@ -1,12 +1,16 @@
 /* global CopilotSw */
 
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPERS (private to this file)
+// ─────────────────────────────────────────────────────────────────────────────
+
 function ensureAgentStateShape() {
   if (!CopilotSw.agentState.formSession) {
     CopilotSw.agentState.formSession = {
       active: false,
       pendingFields: [],
       lastAskedField: null,
-      filledFields: {}
+      filledFields: {},
     };
   }
 }
@@ -35,43 +39,56 @@ function getStructuredRowsFromContext(lastContent, pageContext) {
   });
 }
 
-function formatFallbackAnswer(goal, pageContext, chatHistory) {
+function getLastToolContent(chatHistory) {
+  const lastToolMessage = [...chatHistory]
+    .reverse()
+    .find(message => message.role === 'tool' && message.content);
+  return lastToolMessage?.content || null;
+}
+
+function formatExtractionAnswer(lastContent, pageContext) {
+  const extractedRows = getStructuredRowsFromContext(lastContent, pageContext);
+  if (extractedRows.length > 0) {
+    return JSON.stringify(extractedRows, null, 2);
+  }
+  return null;
+}
+
+function formatSummaryAnswer(lastContent, goal) {
+  if (!lastContent?.success || typeof lastContent.summary !== 'string' || !lastContent.summary.trim()) {
+    return null;
+  }
+
+  const summaryText = lastContent.summary.trim();
   const lowerGoal = String(goal || '').toLowerCase();
-  const lastToolMessage = [...chatHistory].reverse().find(message => message.role === 'tool' && message.content);
-  const lastContent = lastToolMessage?.content || null;
 
-  if (CopilotSw.isStructuredExtractionGoal(lowerGoal)) {
-    const extractedRows = getStructuredRowsFromContext(lastContent, pageContext);
-    if (extractedRows.length > 0) {
-      return JSON.stringify(extractedRows, null, 2);
+  if (lowerGoal.includes('bullet')) {
+    const items = summaryText
+      .split(/[\n.;]+/)
+      .map(item => item.trim())
+      .filter(Boolean)
+      .slice(0, 5);
+
+    if (items.length > 0) {
+      return items.map(item => `- ${item}`).join('\n');
     }
   }
 
-  if (lastContent?.success && typeof lastContent.summary === 'string' && lastContent.summary.trim()) {
-    const summaryText = lastContent.summary.trim();
-    if (lowerGoal.includes('bullet')) {
-      const items = summaryText
-        .split(/[\n.;]+/)
-        .map(item => item.trim())
-        .filter(Boolean)
-        .slice(0, 5);
+  return summaryText;
+}
 
-      if (items.length > 0) {
-        return items.map(item => `- ${item}`).join('\n');
-      }
-    }
-
-    return summaryText;
+function formatDataPreviewAnswer(lastContent) {
+  if (!lastContent?.success || !Array.isArray(lastContent.data) || lastContent.data.length === 0) {
+    return null;
   }
 
-  if (lastContent?.success && Array.isArray(lastContent.data) && lastContent.data.length > 0) {
-    const preview = lastContent.data.slice(0, 5).map(item => {
-      if (typeof item === 'string') return item;
-      return JSON.stringify(item);
-    });
-    return preview.map(item => `- ${item}`).join('\n');
-  }
+  const preview = lastContent.data.slice(0, 5).map(item => {
+    return typeof item === 'string' ? item : JSON.stringify(item);
+  });
+  return preview.map(item => `- ${item}`).join('\n');
+}
 
+function formatPageFallbackAnswer(pageContext) {
   const title = pageContext?.title ? `Page: ${pageContext.title}` : null;
   const text = typeof pageContext?.textContent === 'string'
     ? pageContext.textContent.trim().replace(/\s+/g, ' ').slice(0, 280)
@@ -81,18 +98,201 @@ function formatFallbackAnswer(goal, pageContext, chatHistory) {
   return parts.join('\n\n') || 'I could not complete the request.';
 }
 
+function formatFallbackAnswer(goal, pageContext, chatHistory) {
+  const lowerGoal = String(goal || '').toLowerCase();
+  const lastContent = getLastToolContent(chatHistory);
+
+  if (CopilotSw.isStructuredExtractionGoal(lowerGoal)) {
+    const extraction = formatExtractionAnswer(lastContent, pageContext);
+    if (extraction) return extraction;
+  }
+
+  const summary = formatSummaryAnswer(lastContent, goal);
+  if (summary) return summary;
+
+  const dataPreview = formatDataPreviewAnswer(lastContent);
+  if (dataPreview) return dataPreview;
+
+  return formatPageFallbackAnswer(pageContext);
+}
+
+function collectRecentTools(chatHistory) {
+  const recentTools = [];
+  for (let i = chatHistory.length - 1; i >= 0; i--) {
+    const msg = chatHistory[i];
+    if (msg.role === 'user') break;
+    if (msg.role === 'tool' && msg.toolName) recentTools.unshift(msg.toolName);
+  }
+  return [...new Set(recentTools)];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FORM WORKFLOW HANDLER
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function handleFormWorkflow(goal, pageContext, tabId) {
+  const normalizedGoal = String(goal || '').toLowerCase();
+
+  const isFormIntent =
+    CopilotSw.isFormFillGoal(normalizedGoal) ||
+    CopilotSw.isFormSubmitGoal(normalizedGoal) ||
+    (typeof CopilotSw.isFormClearGoal === 'function' && CopilotSw.isFormClearGoal(normalizedGoal));
+
+  const isFormSessionActive = !!CopilotSw.agentState.formSession?.active;
+
+  const directFormWorkflowAnswer = await CopilotSw.tryDirectFormWorkflow(goal, pageContext, tabId);
+
+  if (!isFormSessionActive && !isFormIntent && !directFormWorkflowAnswer) {
+    return null; // Not a form workflow — let the normal agent loop handle it
+  }
+
+  const assistantMessage =
+    directFormWorkflowAnswer ||
+    (isFormSessionActive
+      ? 'Please provide the next requested form value.'
+      : 'I found the form, but I could not process it automatically.');
+
+  if (assistantMessage) {
+    CopilotSw.updateAgentStatus('finalizing', 'Wrapping up the form workflow.', true);
+    CopilotSw.agentState.chatHistory.push({
+      role: 'assistant',
+      content: assistantMessage,
+      timestamp: Date.now(),
+    });
+  }
+
+  if (!CopilotSw.agentState.formSession?.active) {
+    CopilotSw.agentState.currentGoal = null;
+  }
+
+  return { handled: true };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AGENT LOOP
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function runAgentLoop(goal, tabId) {
+  let continueLoop = true;
+
+  while (
+    continueLoop &&
+    CopilotSw.agentState.isRunning &&
+    CopilotSw.agentState.iterationCount < CopilotSw.CONFIG.MAX_REACT_ITERATIONS
+  ) {
+    CopilotSw.agentState.iterationCount++;
+    CopilotSw.updateAgentStatus('thinking', 'Reasoning about the next step.', true);
+
+    const llmResponse = await CopilotSw.callLLM(
+      goal,
+      CopilotSw.agentState.pageContext,
+      CopilotSw.agentState.chatHistory
+    );
+
+    if (!CopilotSw.agentState.isRunning) break;
+
+    CopilotSw.broadcastUI({
+      action: 'updateReasoning',
+      thought: llmResponse.thought,
+      actionName: llmResponse.action,
+      actionInput: llmResponse.action_input,
+    });
+
+    // ── Final Answer ──
+    if (llmResponse.action === 'final_answer') {
+      CopilotSw.updateAgentStatus('finalizing', 'Wrapping up the final answer.', true);
+
+      CopilotSw.agentState.chatHistory.push({
+        role: 'assistant',
+        content: llmResponse.answer,
+        thought: llmResponse.thought,
+        toolsUsed: collectRecentTools(CopilotSw.agentState.chatHistory),
+        timestamp: Date.now(),
+      });
+
+      continueLoop = false;
+      break;
+    }
+
+    // ── Execute Tool ──
+    CopilotSw.updateAgentStatus('acting', `Running tool: ${llmResponse.action}.`, true);
+
+    const toolResult = await CopilotSw.executeToolWithApproval(
+      llmResponse.action,
+      llmResponse.action_input,
+      tabId
+    );
+
+    if (!CopilotSw.agentState.isRunning) break;
+
+    // ── Cancelled by user ──
+    if (toolResult?.error && toolResult.error.includes('cancel')) {
+      CopilotSw.agentState.chatHistory.push({
+        role: 'assistant',
+        content: 'Action cancelled. Workflow stopped.',
+        timestamp: Date.now(),
+      });
+      continueLoop = false;
+      break;
+    }
+
+    // ── Record tool result ──
+    CopilotSw.agentState.chatHistory.push({
+      role: 'tool',
+      toolName: llmResponse.action,
+      content: toolResult,
+      timestamp: Date.now(),
+    });
+
+    // ── Refresh page context ──
+    CopilotSw.agentState.pageContext = await CopilotSw.sendMessageToTab(tabId, {
+      action: 'readPage',
+      focusArea: null,
+    }).catch(() => CopilotSw.agentState.pageContext);
+
+    await CopilotSw.agentState.save();
+
+    CopilotSw.broadcastUI({
+      action: 'updateProgress',
+      iteration: CopilotSw.agentState.iterationCount,
+      maxIterations: CopilotSw.CONFIG.MAX_REACT_ITERATIONS,
+    });
+  }
+
+  // ── Max iterations reached — fallback ──
+  if (
+    CopilotSw.agentState.isRunning &&
+    CopilotSw.agentState.iterationCount >= CopilotSw.CONFIG.MAX_REACT_ITERATIONS
+  ) {
+    const fallbackAnswer = formatFallbackAnswer(
+      goal,
+      CopilotSw.agentState.pageContext,
+      CopilotSw.agentState.chatHistory
+    );
+
+    CopilotSw.agentState.chatHistory.push({
+      role: 'assistant',
+      content: fallbackAnswer,
+      timestamp: Date.now(),
+    });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PUBLIC API
+// ─────────────────────────────────────────────────────────────────────────────
+
 CopilotSw.clearAgentSession = async function clearAgentSession() {
   CopilotSw.agentState.chatHistory = [];
   CopilotSw.agentState.currentGoal = null;
   CopilotSw.agentState.pageContext = null;
   CopilotSw.agentState.iterationCount = 0;
   CopilotSw.agentState.isRunning = false;
-
   CopilotSw.agentState.formSession = {
     active: false,
     pendingFields: [],
     lastAskedField: null,
-    filledFields: {}
+    filledFields: {},
   };
 
   if (CopilotSw.activeLLMController) {
@@ -113,7 +313,7 @@ CopilotSw.clearAgentSession = async function clearAgentSession() {
     success: true,
     chatHistory: [],
     iteration: 0,
-    maxIterations: CopilotSw.CONFIG.MAX_REACT_ITERATIONS
+    maxIterations: CopilotSw.CONFIG.MAX_REACT_ITERATIONS,
   };
 };
 
@@ -126,21 +326,19 @@ CopilotSw.handleStartAgent = async function handleStartAgent(goal) {
       throw new Error('Agent is already running');
     }
 
+    // ── Initialize state ──
     CopilotSw.agentState.isRunning = true;
     CopilotSw.agentState.currentGoal = goal;
     CopilotSw.agentState.iterationCount = 0;
     await CopilotSw.agentState.save();
 
-    CopilotSw.updateAgentStatus(
-      'reading',
-      'Collecting the current page context before starting.',
-      true
-    );
+    // ── Read current page ──
+    CopilotSw.updateAgentStatus('reading', 'Collecting the current page context before starting.', true);
 
     const tab = await CopilotSw.getUsableTab();
     const pageContext = await CopilotSw.sendMessageToTab(tab.id, {
       action: 'readPage',
-      focusArea: null
+      focusArea: null,
     });
 
     CopilotSw.agentState.pageContext = pageContext;
@@ -148,179 +346,34 @@ CopilotSw.handleStartAgent = async function handleStartAgent(goal) {
     CopilotSw.agentState.chatHistory.push({
       role: 'user',
       content: goal,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
 
-    const normalizedGoal = String(goal || '').toLowerCase();
+    // ── Try form workflow first ──
+    const formResult = await handleFormWorkflow(goal, pageContext, tab.id);
 
-    const isFormIntent =
-      CopilotSw.isFormFillGoal(normalizedGoal) ||
-      CopilotSw.isFormSubmitGoal(normalizedGoal) ||
-      (typeof CopilotSw.isFormClearGoal === 'function' && CopilotSw.isFormClearGoal(normalizedGoal));
-
-    const isFormSessionActive = !!CopilotSw.agentState.formSession?.active;
-
-    /*
-      IMPORTANT:
-      Always prioritize direct form workflow.
-      If a form session is active, do NOT fall back to the general LLM loop.
-    */
-    const directFormWorkflowAnswer = await CopilotSw.tryDirectFormWorkflow(
-      goal,
-      CopilotSw.agentState.pageContext,
-      tab.id
-    );
-
-    if (isFormSessionActive || isFormIntent || directFormWorkflowAnswer) {
-      const assistantMessage =
-        directFormWorkflowAnswer ||
-        (isFormSessionActive
-          ? 'Please provide the next requested form value.'
-          : 'I found the form, but I could not process it automatically.');
-
-      if (assistantMessage) {
-        CopilotSw.updateAgentStatus('finalizing', 'Wrapping up the form workflow.', true);
-        CopilotSw.agentState.chatHistory.push({
-          role: 'assistant',
-          content: assistantMessage,
-          timestamp: Date.now()
-        });
-      }
-
-      /*
-        Keep the session alive only if form workflow says it is still active.
-        Otherwise release the goal so the next request starts fresh.
-      */
-      if (!CopilotSw.agentState.formSession?.active) {
-        CopilotSw.agentState.currentGoal = null;
-      }
-
+    if (formResult?.handled) {
       CopilotSw.agentState.isRunning = false;
       await CopilotSw.agentState.save();
       CopilotSw.updateAgentStatus('idle', 'Ready for your next request.', false);
 
       return {
         success: true,
-        chatHistory: CopilotSw.agentState.chatHistory
+        chatHistory: CopilotSw.agentState.chatHistory,
       };
     }
 
-    /*
-      Normal agent loop for non-form requests
-    */
-    let continueLoop = true;
+    // ── Run normal agent loop ──
+    await runAgentLoop(goal, tab.id);
 
-    while (
-      continueLoop &&
-      CopilotSw.agentState.isRunning &&
-      CopilotSw.agentState.iterationCount < CopilotSw.CONFIG.MAX_REACT_ITERATIONS
-    ) {
-      CopilotSw.agentState.iterationCount++;
-      CopilotSw.updateAgentStatus('thinking', 'Reasoning about the next step.', true);
-
-      const llmResponse = await CopilotSw.callLLM(
-        goal,
-        CopilotSw.agentState.pageContext,
-        CopilotSw.agentState.chatHistory
-      );
-
-      if (!CopilotSw.agentState.isRunning) break;
-
-      CopilotSw.broadcastUI({
-        action: 'updateReasoning',
-        thought: llmResponse.thought,
-        actionName: llmResponse.action,
-        actionInput: llmResponse.action_input
-      });
-
-      if (llmResponse.action === 'final_answer') {
-        CopilotSw.updateAgentStatus('finalizing', 'Wrapping up the final answer.', true);
-
-        const recentTools = [];
-        for (let i = CopilotSw.agentState.chatHistory.length - 1; i >= 0; i--) {
-          const msg = CopilotSw.agentState.chatHistory[i];
-          if (msg.role === 'user') break;
-          if (msg.role === 'tool' && msg.toolName) recentTools.unshift(msg.toolName);
-        }
-        const uniqueTools = [...new Set(recentTools)];
-
-        CopilotSw.agentState.chatHistory.push({
-          role: 'assistant',
-          content: llmResponse.answer,
-          thought: llmResponse.thought,
-          toolsUsed: uniqueTools,
-          timestamp: Date.now()
-        });
-
-        continueLoop = false;
-        break;
-      }
-
-      CopilotSw.updateAgentStatus('acting', `Running tool: ${llmResponse.action}.`, true);
-
-      const toolResult = await CopilotSw.executeToolWithApproval(
-        llmResponse.action,
-        llmResponse.action_input,
-        tab.id
-      );
-
-      if (!CopilotSw.agentState.isRunning) break;
-
-      if (toolResult?.error && toolResult.error.includes('cancel')) {
-        CopilotSw.agentState.chatHistory.push({
-          role: 'assistant',
-          content: 'Action cancelled. Workflow stopped.',
-          timestamp: Date.now()
-        });
-        continueLoop = false;
-        break;
-      }
-
-      CopilotSw.agentState.chatHistory.push({
-        role: 'tool',
-        toolName: llmResponse.action,
-        content: toolResult,
-        timestamp: Date.now()
-      });
-
-      CopilotSw.agentState.pageContext = await CopilotSw.sendMessageToTab(tab.id, {
-        action: 'readPage',
-        focusArea: null
-      }).catch(() => CopilotSw.agentState.pageContext);
-
-      await CopilotSw.agentState.save();
-
-      CopilotSw.broadcastUI({
-        action: 'updateProgress',
-        iteration: CopilotSw.agentState.iterationCount,
-        maxIterations: CopilotSw.CONFIG.MAX_REACT_ITERATIONS
-      });
-    }
-
-    if (
-      CopilotSw.agentState.isRunning &&
-      CopilotSw.agentState.iterationCount >= CopilotSw.CONFIG.MAX_REACT_ITERATIONS
-    ) {
-      const fallbackAnswer = formatFallbackAnswer(
-        goal,
-        CopilotSw.agentState.pageContext,
-        CopilotSw.agentState.chatHistory
-      );
-
-      CopilotSw.agentState.chatHistory.push({
-        role: 'assistant',
-        content: fallbackAnswer,
-        timestamp: Date.now()
-      });
-    }
-
+    // ── Finalize ──
     CopilotSw.agentState.isRunning = false;
     await CopilotSw.agentState.save();
     CopilotSw.updateAgentStatus('idle', 'Ready for your next request.', false);
 
     return {
       success: true,
-      chatHistory: CopilotSw.agentState.chatHistory
+      chatHistory: CopilotSw.agentState.chatHistory,
     };
   } catch (error) {
     CopilotSw.agentState.isRunning = false;

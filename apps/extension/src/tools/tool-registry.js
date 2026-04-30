@@ -1,9 +1,9 @@
 /**
  * Tool Registry
- * All available tools for the agent
+ * All available tools for the agent — defines what the LLM can call
  */
 
-module.exports = {
+const TOOL_REGISTRY = {
   READ_PAGE: {
     name: 'read_page',
     description: 'Extracts an accessible, structured map of the current page',
@@ -74,3 +74,7 @@ module.exports = {
     }
   }
 };
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = TOOL_REGISTRY;
+}

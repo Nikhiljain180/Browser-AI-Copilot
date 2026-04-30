@@ -17,14 +17,14 @@ class ContentSanitizer {
    */
   static sanitizeText(text) {
     if (!text) return '';
-    
+
     const str = String(text);
-    
+
     // Use DOMPurify if available (content script context)
     if (DOMPurifyLib) {
       return DOMPurifyLib.sanitize(str, { ALLOWED_TAGS: [] });
     }
-    
+
     // Fallback for non-DOM contexts (service worker)
     return str
       .replace(/</g, '&lt;')
@@ -40,15 +40,15 @@ class ContentSanitizer {
    */
   static sanitizeHTML(html) {
     if (!html) return '';
-    
-    // Use DOMPurify if available - allows safe tags like <b>, <i>, <p>, <div>
+
+    // Use DOMPurify if available
     if (DOMPurifyLib) {
       return DOMPurifyLib.sanitize(html, {
         ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'p', 'br', 'div', 'span', 'a', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'table', 'thead', 'tbody', 'tr', 'td', 'th'],
         ALLOWED_ATTR: ['href', 'target', 'rel']
       });
     }
-    
+
     // Fallback: manually strip dangerous elements
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = html;

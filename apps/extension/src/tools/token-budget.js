@@ -1,6 +1,6 @@
 /**
  * Token Budget Management
- * Handles context truncation and optimization
+ * Handles context truncation and optimization for service worker
  */
 
 class TokenBudgetManager {
@@ -12,7 +12,7 @@ class TokenBudgetManager {
    * Estimate tokens (simple: ~4 chars = 1 token)
    */
   estimateTokens(text) {
-    return Math.ceil(text.length / 4);
+    return Math.ceil(String(text || '').length / 4);
   }
 
   /**
@@ -25,13 +25,13 @@ class TokenBudgetManager {
     // Priority 1: Viewport elements
     if (truncated.elements) {
       const visibleElements = truncated.elements.filter(el => el.visible);
-      truncated.elements = visibleElements.slice(0, 20); // Limit to 20 visible elements
+      truncated.elements = visibleElements.slice(0, 20);
       usedTokens += this.estimateTokens(JSON.stringify(truncated.elements));
     }
 
     // Priority 2: Forms (often important)
     if (truncated.forms && usedTokens < availableTokens * 0.5) {
-      truncated.forms = truncated.forms.slice(0, 3); // Limit to 3 forms
+      truncated.forms = truncated.forms.slice(0, 3);
       usedTokens += this.estimateTokens(JSON.stringify(truncated.forms));
     }
 
@@ -48,7 +48,7 @@ class TokenBudgetManager {
     if (truncated.tables && usedTokens < availableTokens * 0.7) {
       truncated.tables = truncated.tables.map(table => ({
         ...table,
-        rows: table.rows.slice(0, 5) // First 5 rows only
+        rows: table.rows.slice(0, 5)
       }));
     }
 
@@ -85,4 +85,6 @@ class TokenBudgetManager {
   }
 }
 
-module.exports = TokenBudgetManager;
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = TokenBudgetManager;
+}
