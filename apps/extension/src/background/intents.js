@@ -1,66 +1,50 @@
 /* global CopilotSw */
 
 CopilotSw.isStructuredExtractionGoal = function isStructuredExtractionGoal(goal) {
-  return goal.includes('extract') ||
-    goal.includes('all products') ||
-    goal.includes('products') ||
-    goal.includes('product info') ||
-    goal.includes('all leads') ||
-    goal.includes('structured data') ||
-    goal.includes('table');
+  const signals = [
+    'extract', 'all products', 'products', 'product info',
+    'all leads', 'structured data', 'table',
+  ];
+  const normalized = goal.toLowerCase();
+  return signals.some(signal => normalized.includes(signal));
 };
 
 CopilotSw.isFormFillGoal = function isFormFillGoal(goal) {
-  return goal.includes('fill') ||
-    goal.includes('replace') ||
-    goal.includes('replace the form') ||
-    goal.includes('replace the value') ||
-    goal.startsWith('with ') ||
-    goal.includes('fill the form') ||
-    goal.includes('fill this form') ||
-    goal.includes('change this value') ||
-    goal.includes('change the value') ||
-    goal.includes('change the field') ||
-    goal.includes('change field') ||
-    goal.includes('update the field') ||
-    goal.includes('update field') ||
-    goal.includes('set the field') ||
-    goal.includes('set field') ||
-    goal.includes('enter ') ||
-    goal.includes('type ') ||
-    goal.includes('write ') ||
-    goal.includes('reply') ||
-    goal.includes('name:') ||
-    goal.includes('email:') ||
-    goal.includes('dummy data') ||
-    goal.includes('sample data') ||
-    goal.includes('other data') ||
-    goal.includes('other value') ||
-    goal.includes('different data') ||
-    goal.includes('other values') ||
-    goal.includes('different values');
+  const startsWithSignals = ['with '];
+  const includesSignals = [
+    'fill', 'replace', 'replace the form', 'replace the value',
+    'fill the form', 'fill this form',
+    'change this value', 'change the value', 'change the field', 'change field',
+    'update the field', 'update field', 'set the field', 'set field',
+    'enter ', 'type ', 'write ', 'reply',
+    'name:', 'email:',
+    'dummy data', 'sample data', 'other data', 'other value',
+    'different data', 'other values', 'different values',
+  ];
+
+  const normalized = goal.toLowerCase();
+  return startsWithSignals.some(signal => normalized.startsWith(signal)) ||
+    includesSignals.some(signal => normalized.includes(signal));
 };
 
 CopilotSw.isFormSubmitGoal = function isFormSubmitGoal(goal) {
-  return goal.includes('submit') ||
-    goal.includes('send form') ||
-    goal.includes('send this form') ||
-    goal.includes('click submit');
+  const signals = ['submit', 'send form', 'send this form', 'click submit'];
+  const normalized = goal.toLowerCase();
+  return signals.some(signal => normalized.includes(signal));
 };
 
 CopilotSw.wasRecentFormFillConversation = function wasRecentFormFillConversation(chatHistory = []) {
+  const signals = [
+    'filled the form', 'sample data', 'different set of sample values',
+    'what is your name', 'what is your email',
+    'required detail', 'i need a bit more information', 'missing',
+  ];
+
   const recentMessages = chatHistory.slice(-6);
   return recentMessages.some(message => {
     if (message.role === 'user') return false;
     const content = String(message?.content || '').toLowerCase();
-    return content.includes('filled the form') ||
-      content.includes('sample data') ||
-      content.includes('different set of sample values') ||
-      content.includes('what is your name') ||
-      content.includes('what is your email') ||
-      content.includes('required detail') ||
-      content.includes('i need a bit more information') ||
-      content.includes('missing');
+    return signals.some(signal => content.includes(signal));
   });
 };
 
@@ -72,4 +56,3 @@ CopilotSw.isFormValueFollowupGoal = function isFormValueFollowupGoal(goal) {
     /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(normalized) ||
     (/^[a-z\s]+$/i.test(normalized) && normalized.length <= 40);
 };
-

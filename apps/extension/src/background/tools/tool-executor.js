@@ -1,16 +1,21 @@
 /* global CopilotSw */
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ACTION CLASSIFICATION
+// ─────────────────────────────────────────────────────────────────────────────
+
+const HIGH_RISK_PATTERN = /\b(submit|apply|send|finish|complete|post|delete|remove|confirm)\b/;
+
 CopilotSw.classifyAction = function classifyAction(toolName, toolInput) {
   const description = String(toolInput?.description || '').trim();
   const selector = String(toolInput?.selector || '').toLowerCase();
   const combined = `${description.toLowerCase()} ${selector}`.trim();
 
-  // submit/delete verbs → high risk
-  if (toolName === 'click_element' && /\b(submit|apply|send|finish|complete|post|delete|remove|confirm)\b/.test(combined)) {
+  if (toolName === 'click_element' && HIGH_RISK_PATTERN.test(combined)) {
     return {
       requiresApproval: true,
       riskLevel: 'high',
-      actionDescription: description || `Click "${toolInput?.selector || 'element'}" — this looks like a destructive submit/delete action.`
+      actionDescription: description || `Click "${toolInput?.selector || 'element'}" — this looks like a destructive submit/delete action.`,
     };
   }
 
@@ -18,7 +23,7 @@ CopilotSw.classifyAction = function classifyAction(toolName, toolInput) {
     return {
       requiresApproval: true,
       riskLevel: 'medium',
-      actionDescription: description || `Click "${toolInput?.selector || 'element'}".`
+      actionDescription: description || `Click "${toolInput?.selector || 'element'}".`,
     };
   }
 
@@ -29,23 +34,37 @@ CopilotSw.isDestructiveAction = function isDestructiveAction(toolName, toolInput
   return CopilotSw.classifyAction(toolName, toolInput).requiresApproval;
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// TOOL EXECUTION
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TOOL_RETRY_DELAY_MS = 250;
+const MAX_TOOL_ATTEMPTS = 2;
+
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function generateApprovalId() {
+  return `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+}
+
 CopilotSw.executeToolWithApproval = async function executeToolWithApproval(toolName, toolInput, tabId) {
   const classification = CopilotSw.classifyAction(toolName, toolInput);
+
   if (!classification.requiresApproval) {
     return CopilotSw.executeTool(toolName, toolInput, tabId);
   }
 
-  const approvalId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  // ── Request human approval ──
+  const approvalId = generateApprovalId();
+
   CopilotSw.pendingApprovals[approvalId] = {
     toolName,
     toolInput,
     riskLevel: classification.riskLevel,
     actionDescription: classification.actionDescription,
-    timestamp: Date.now()
+    timestamp: Date.now(),
   };
 
   CopilotSw.broadcastUI({
@@ -54,7 +73,7 @@ CopilotSw.executeToolWithApproval = async function executeToolWithApproval(toolN
     toolName,
     toolInput,
     riskLevel: classification.riskLevel,
-    actionDescription: classification.actionDescription
+    actionDescription: classification.actionDescription,
   });
 
   const approved = await CopilotSw.waitForApproval(approvalId, CopilotSw.CONFIG.TOOL_TIMEOUT_MS);
@@ -70,8 +89,8 @@ CopilotSw.executeToolWithApproval = async function executeToolWithApproval(toolN
 CopilotSw.executeTool = async function executeTool(toolName, toolInput, tabId) {
   let lastError = null;
 
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
-    if (CopilotSw.agentState && CopilotSw.agentState.isRunning === false) {
+  for (let attempt = 1; attempt <= MAX_TOOL_ATTEMPTS; attempt += 1) {
+    if (CopilotSw.agentState?.isRunning === false) {
       return { error: 'Agent stopped by user.' };
     }
 
@@ -79,7 +98,7 @@ CopilotSw.executeTool = async function executeTool(toolName, toolInput, tabId) {
       const result = await CopilotSw.sendMessageToTab(tabId, {
         action: 'executeTool',
         toolName,
-        toolInput
+        toolInput,
       });
 
       if (result && !result.error) {
@@ -91,8 +110,8 @@ CopilotSw.executeTool = async function executeTool(toolName, toolInput, tabId) {
       lastError = error;
     }
 
-    if (attempt === 1) {
-      await delay(250);
+    if (attempt < MAX_TOOL_ATTEMPTS) {
+      await delay(TOOL_RETRY_DELAY_MS);
     }
   }
 

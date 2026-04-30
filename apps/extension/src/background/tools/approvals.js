@@ -1,11 +1,20 @@
 /* global CopilotSw */
 
+// ─────────────────────────────────────────────────────────────────────────────
+// APPROVAL STATE
+// ─────────────────────────────────────────────────────────────────────────────
+
 CopilotSw.pendingApprovals = CopilotSw.pendingApprovals || {};
 CopilotSw.approvalPromises = CopilotSw.approvalPromises || {};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// APPROVAL LIFECYCLE
+// ─────────────────────────────────────────────────────────────────────────────
 
 CopilotSw.waitForApproval = function waitForApproval(approvalId, timeoutMs) {
   return new Promise((resolve) => {
     CopilotSw.approvalPromises[approvalId] = resolve;
+
     setTimeout(() => {
       if (CopilotSw.approvalPromises[approvalId]) {
         delete CopilotSw.approvalPromises[approvalId];
@@ -34,4 +43,3 @@ CopilotSw.handleRejectAction = async function handleRejectAction(approvalId) {
   delete CopilotSw.pendingApprovals[approvalId];
   return { success: true };
 };
-

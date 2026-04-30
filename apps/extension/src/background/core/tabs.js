@@ -1,11 +1,19 @@
 /* global CopilotSw, chrome */
 
+// ─────────────────────────────────────────────────────────────────────────────
+// TAB UTILITIES
+// ─────────────────────────────────────────────────────────────────────────────
+
+const RESTRICTED_PREFIXES = ['chrome://', 'chrome-extension://', 'edge://', 'about:'];
+
+const INJECTION_ERROR_PATTERNS = [
+  'Cannot access',
+  'cannot be scripted',
+  'The extensions gallery cannot be scripted',
+];
+
 CopilotSw.isRestrictedUrl = function isRestrictedUrl(url = '') {
-  const restricted = url.startsWith('chrome://') ||
-    url.startsWith('chrome-extension://') ||
-    url.startsWith('edge://') ||
-    url.startsWith('about:');
-  return restricted;
+  return RESTRICTED_PREFIXES.some(prefix => url.startsWith(prefix));
 };
 
 CopilotSw.getUsableTab = async function getUsableTab() {
@@ -34,6 +42,7 @@ CopilotSw.sendMessageToTab = async function sendMessageToTab(tabId, message) {
       throw error;
     }
 
+    // ── Content script not loaded — try injecting ──
     const tab = await chrome.tabs.get(tabId);
     if (tab?.url && CopilotSw.isRestrictedUrl(tab.url)) {
       throw new Error('Open the Copilot on a normal web page, then try again.');
@@ -42,15 +51,15 @@ CopilotSw.sendMessageToTab = async function sendMessageToTab(tabId, message) {
     try {
       await chrome.scripting.executeScript({
         target: { tabId },
-        files: ['src/content/content-script.js']
+        files: ['src/content/content-script.js'],
       });
     } catch (injectionError) {
       const injectionMessage = injectionError?.message || '';
-      if (
-        injectionMessage.includes('Cannot access') ||
-        injectionMessage.includes('cannot be scripted') ||
-        injectionMessage.includes('The extensions gallery cannot be scripted')
-      ) {
+      const isRestricted = INJECTION_ERROR_PATTERNS.some(
+        pattern => injectionMessage.includes(pattern)
+      );
+
+      if (isRestricted) {
         throw new Error('Open the Copilot on a normal web page, then try again.');
       }
       throw injectionError;
@@ -59,4 +68,3 @@ CopilotSw.sendMessageToTab = async function sendMessageToTab(tabId, message) {
     return chrome.tabs.sendMessage(tabId, message);
   }
 };
-
