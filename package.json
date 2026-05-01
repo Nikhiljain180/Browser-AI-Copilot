@@ -14,7 +14,8 @@
     "dev:backend": "npm run dev --workspace=apps/backend",
     "dev:extension": "npm run dev --workspace=apps/extension",
     "test": "npm run test --workspace=apps/backend && npm run test --workspace=apps/extension",
-    "test:integration": "jest --config=tests/integration/jest.config.js",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "npm run test --workspace=apps/backend",
     "test:e2e": "playwright test --config=tests/e2e/playwright.config.js",
     "lint": "eslint apps/ --ext .js,.ts",
     "format": "prettier --write \"apps/**/*.{js,ts,json,md}\""

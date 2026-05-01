@@ -255,9 +255,9 @@ Keyword helpers like `isFormFillGoal` / `isStructuredExtractionGoal` exist but *
 
 Covered in the Tool Design section above: LLM-authored by default, with a deterministic, hallucination-safe template fallback if the LLM omits the `draft` field. The fallback never invents facts.
 
-### Content-script size
+### Content-script architecture
 
-[`content-script.js`](apps/extension/src/content/content-script.js) is intentionally kept as a single file (~830 lines) so the auto-injected bundle has one entry point and no cross-file ordering bugs at `document_start`. The internals are organized into clearly-labelled sections (sanitization, perception, selector registry, tool execution). A future refactor would split perception/tool modules and bundle them; this was deferred to keep the E2E suite stable for submission.
+The content layer is split into focused modules loaded in manifest order: `core/` (sanitizer, registry, selector, utils, token-budget), `observers/navigation.js`, `tools/` (one file per tool), and a thin `content-script.js` entry point (~54 lines) that only wires the message listener. This avoids cross-file ordering bugs at `document_start` while keeping each concern independently readable and testable.
 
 ### Backend `server.js`
 
@@ -273,14 +273,17 @@ Single-file Express server (~625 lines) carrying routes, prompts, and provider a
 ## Testing
 
 ```bash
-# Run unit tests (agent logic)
+# Run unit tests (agent logic — Vitest)
 npm run test:unit
 
-# Run backend integration tests
+# Run backend integration tests (Jest + ts-jest)
 npm run test:integration
 
 # Run E2E tests (Playwright)
 npm run test:e2e
+
+# Run all tests (backend + extension)
+npm test
 ```
 
 ## License
