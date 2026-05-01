@@ -9,7 +9,6 @@ function clickElement(target, description) {
       element.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
-    // Synthetic click that works with frameworks
     element.focus();
     element.click();
 

@@ -7,7 +7,6 @@ function extractData(target, schema = null) {
       return { error: target ? `Target not found: ${target}` : 'No structured data target found on the page' };
     }
 
-    // Extract table or list data
     const data = [];
 
     if (targetElement.tagName === 'TABLE') {
@@ -21,18 +20,60 @@ function extractData(target, schema = null) {
         const rowData = {};
         cells.forEach((cell, idx) => {
           const header = headers[idx] || `col_${idx}`;
-          rowData[normalizeDataKey(header)] = cell.innerText.trim();
+
+          // Check if cell contains a link
+          const cellLink = cell.querySelector('a[href]');
+          if (cellLink) {
+            rowData[normalizeDataKey(header)] = {
+              text: ContentSanitizer.sanitizeText(cellLink.innerText || cell.innerText || ''),
+              href: cellLink.href
+            };
+          } else {
+            rowData[normalizeDataKey(header)] = ContentSanitizer.sanitizeText(cell.innerText || '');
+          }
         });
+
+        // Also extract all links in the row as actions
+        const rowLinks = row.querySelectorAll('a[href]');
+        if (rowLinks.length > 0) {
+          rowData._actions = Array.from(rowLinks).map(link => ({
+            text: ContentSanitizer.sanitizeText(link.innerText.trim() || link.getAttribute('aria-label') || 'Link'),
+            href: link.href
+          }));
+        }
+
         data.push(rowData);
       });
     } else {
-      // Extract list items
       const items = targetElement.querySelectorAll('li, .item, [data-item]');
+      const includeHtml = schema && schema.includeHtml === true;
+
       items.forEach(item => {
-        data.push({
-          text: item.innerText,
-          html: item.innerHTML
-        });
+        const entry = { text: ContentSanitizer.sanitizeText(item.innerText || '') };
+
+        // Always extract links/actions within each item
+        const links = item.querySelectorAll('a[href]');
+        if (links.length > 0) {
+          entry.actions = Array.from(links).map(link => ({
+            text: ContentSanitizer.sanitizeText(link.innerText.trim() || link.getAttribute('aria-label') || 'Link'),
+            href: link.href
+          }));
+        }
+
+        // Extract buttons within each item
+        const buttons = item.querySelectorAll('button, [role="button"]');
+        if (buttons.length > 0) {
+          entry.buttons = Array.from(buttons).map(btn => ({
+            text: ContentSanitizer.sanitizeText(btn.innerText.trim() || btn.getAttribute('aria-label') || 'Button'),
+            selector: generateSelector(btn)
+          }));
+        }
+
+        if (includeHtml) {
+          entry.html = ContentSanitizer.sanitizeHTML(item.innerHTML || '');
+        }
+
+        data.push(entry);
       });
     }
 
@@ -47,12 +88,4 @@ function extractData(target, schema = null) {
   } catch (error) {
     return { error: error.message };
   }
-}
-
-function normalizeDataKey(value) {
-  return String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '') || 'value';
 }

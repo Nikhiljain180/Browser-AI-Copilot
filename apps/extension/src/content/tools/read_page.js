@@ -21,17 +21,14 @@ function extractAccessibilityTree(focusArea = null) {
     sections: []
   };
 
-  // Extract key interactive elements
   extractInteractiveElements(tree, focusArea);
   extractForms(tree);
   extractTables(tree);
   extractLinks(tree);
   extractTextContent(tree);
 
-  // Set up MutationObserver for dynamic content
   observeDOMChanges();
 
-  // Apply token budget constraints to keep LLM context window manageable
   const budgetedTree = applyTokenBudget(tree);
 
   return budgetedTree;
@@ -72,7 +69,6 @@ function extractInteractiveElements(tree, focusArea) {
 
     tree.elements.push(elementData);
 
-    // Categorize
     if (el.tagName === 'BUTTON') tree.buttons.push(elementData);
     if (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)) tree.inputs.push(elementData);
   });
@@ -92,7 +88,6 @@ function extractForms(tree) {
       requiredUnfilledFields: []
     };
 
-    // Extract form fields
     form.querySelectorAll('input, textarea, select').forEach((field, fieldIdx) => {
       formData.fields.push({
         agentId: registerElement(`${formData.id}_field_${fieldIdx}`, field),
@@ -213,19 +208,17 @@ function extractTables(tree) {
       rows: []
     };
 
-    // Extract headers
     table.querySelectorAll('thead th, thead td').forEach(th => {
-      tableData.headers.push(th.innerText);
+      tableData.headers.push(ContentSanitizer.sanitizeText(th.innerText || ''));
     });
 
-    // Extract first 5 rows (truncate for token budget)
     const rows = table.querySelectorAll('tbody tr');
     const displayRows = Math.min(rows.length, 5);
 
     for (let i = 0; i < displayRows; i++) {
       const rowCells = [];
       rows[i].querySelectorAll('td').forEach(cell => {
-        rowCells.push(cell.innerText);
+        rowCells.push(ContentSanitizer.sanitizeText(cell.innerText || ''));
       });
       tableData.rows.push(rowCells);
     }
@@ -289,4 +282,3 @@ function extractSectionSummaries(root) {
 
   return results;
 }
-
