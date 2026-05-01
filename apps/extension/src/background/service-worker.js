@@ -96,8 +96,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 // ── Navigation separator ──────────────────────────────────────────────────────
 
+let _lastNavUrl = '';
+let _lastNavTime = 0;
+
 async function maybeInsertNavigationSeparator(tabId, url, title) {
   if (!url || CopilotSw.isRestrictedUrl(url)) return;
+
+  // Debounce: skip if same URL within 1 second
+  const now = Date.now();
+  if (url === _lastNavUrl && now - _lastNavTime < 1000) return;
+  _lastNavUrl = url;
+  _lastNavTime = now;
 
   await CopilotSw.agentState.load();
 
