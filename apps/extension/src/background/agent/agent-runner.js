@@ -332,10 +332,14 @@ CopilotSw.handleStartAgent = async function handleStartAgent(goal) {
     CopilotSw.agentState.iterationCount = 0;
     await CopilotSw.agentState.save();
 
-    // ── Read current page ──
+      // ── Read current page ──
     CopilotSw.updateAgentStatus('reading', 'Collecting the current page context before starting.', true);
 
     const tab = await CopilotSw.getUsableTab();
+
+    // Ensure content scripts are injected on this tab
+    await CopilotSw.ensureContentScriptInjected(tab.id);
+
     const pageContext = await CopilotSw.sendMessageToTab(tab.id, {
       action: 'readPage',
       focusArea: null,

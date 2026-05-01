@@ -9,7 +9,9 @@
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   try {
-    if (request.action === 'readPage') {
+    if (request.action === 'ping') {
+      sendResponse({ ok: true });
+    } else if (request.action === 'readPage') {
       const pageData = extractAccessibilityTree(request.focusArea);
       sendResponse(pageData);
     } else if (request.action === 'executeTool') {

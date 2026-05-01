@@ -64,6 +64,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     approveAction: () => CopilotSw.handleApproveAction(request.actionId),
     rejectAction: () => CopilotSw.handleRejectAction(request.actionId),
     getChatHistory: () => handleGetChatHistory(),
+    pageContextChanged: async () => {
+      // SPA navigation detected — re-inject content scripts so function
+      // definitions survive the new page context, then update stored pageContext.
+      const tabId = sender?.tab?.id;
+      if (!tabId) return { ok: true };
+      try {
+        await CopilotSw.ensureContentScriptInjected(tabId);
+        const pageContext = await CopilotSw.sendMessageToTab(tabId, { action: 'readPage', focusArea: null });
+        CopilotSw.agentState.pageContext = pageContext;
+      } catch (_) { /* tab may be restricted or navigating */ }
+      return { ok: true };
+    },
   };
 
   const handler = handlers[request.action];

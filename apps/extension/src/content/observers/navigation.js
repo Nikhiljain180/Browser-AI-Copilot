@@ -14,6 +14,9 @@ function notifyPageContextChanged(reason) {
   if (signature === lastPageSignature) return;
   lastPageSignature = signature;
 
+  // Clear stale element references from previous page
+  pageElementRegistry.clear();
+
   chrome.runtime.sendMessage({
     action: 'pageContextChanged',
     url: window.location.href,
