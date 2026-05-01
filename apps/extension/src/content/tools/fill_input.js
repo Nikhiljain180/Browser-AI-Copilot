@@ -5,14 +5,11 @@ function fillInput(target, value) {
       return { error: `Input not found: ${target?.agentId || target?.selector || 'unknown target'}` };
     }
 
-    // Set value and trigger change event (React, Vue, Angular compatible)
-    element.value = value;
+    element.focus();
+    setNativeValue(element, value);
 
-    const inputEvent = new Event('input', { bubbles: true });
-    const changeEvent = new Event('change', { bubbles: true });
-
-    element.dispatchEvent(inputEvent);
-    element.dispatchEvent(changeEvent);
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+    element.dispatchEvent(new Event('change', { bubbles: true }));
 
     return {
       success: true,

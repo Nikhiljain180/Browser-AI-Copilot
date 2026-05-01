@@ -25,11 +25,19 @@
         "<all_urls>"
       ],
       "js": [
+        "src/content/core/sanitizer.js",
+        "src/content/core/registry.js",
+        "src/content/core/selector.js",
+        "src/content/core/utils.js",
+        "src/content/core/token-budget.js",
+        "src/content/observers/navigation.js",
         "src/content/tools/read_page.js",
         "src/content/tools/click_element.js",
         "src/content/tools/fill_input.js",
         "src/content/tools/extract_data.js",
+        "src/content/tools/draft_reply.js",
         "src/content/tools/summarize_page.js",
+        "src/content/tools/reset_form.js",
         "src/content/content-script.js"
       ],
       "run_at": "document_start"
