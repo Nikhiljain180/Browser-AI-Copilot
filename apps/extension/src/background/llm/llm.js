@@ -71,8 +71,8 @@ function buildFocusedPageContext(goal, pageContext) {
     : 12000;
 
   const focusedSections = pickRelevantSections(goal, pageContext, 6);
-  if (focusedSections.length === 0) return pageContext;
 
+  // ── Build sections text ──
   const stitchedText = focusedSections
     .map(section => {
       const title = String(section?.title || '').trim();
@@ -82,11 +82,56 @@ function buildFocusedPageContext(goal, pageContext) {
     .filter(Boolean)
     .join('\n\n');
 
+  // ── Build tables text ──
+  let tablesText = '';
+  if (Array.isArray(pageContext.tables) && pageContext.tables.length > 0) {
+    tablesText = pageContext.tables.map(table => {
+      const title = table.title ? `Table: ${table.title}` : 'Table';
+      const headers = table.headers || [];
+      
+      const rowsText = (table.rows || []).map(row => {
+        if (row.data && typeof row.data === 'object') {
+          return Object.entries(row.data)
+            .filter(([key]) => !key.startsWith('_'))  // skip internal keys
+            .map(([key, value]) => `${key}: ${value}`)
+            .join(' | ');
+        }
+        return '';
+      }).filter(Boolean).join('\n');
+
+      // Include insights if available
+      let insightsText = '';
+      if (table.insights) {
+        const insights = [];
+        if (table.insights.mostReviewed) {
+          insights.push(`Most reviewed: ${table.insights.mostReviewed['PRODUCT NAME'] || table.insights.mostReviewed[headers[1]] || 'N/A'} (${table.insights.mostReviewed._reviewCount} reviews)`);
+        }
+        if (table.insights.topRated) {
+          insights.push(`Top rated: ${table.insights.topRated['PRODUCT NAME'] || table.insights.topRated[headers[1]] || 'N/A'} (${table.insights.topRated._ratingScore} stars)`);
+        }
+        if (table.insights.highestPrice) {
+          insights.push(`Highest price: ${table.insights.highestPrice['PRODUCT NAME'] || table.insights.highestPrice[headers[1]] || 'N/A'} (${table.insights.highestPrice['PRICE'] || ''})`);
+        }
+        if (table.insights.lowestPrice) {
+          insights.push(`Lowest price: ${table.insights.lowestPrice['PRODUCT NAME'] || table.insights.lowestPrice[headers[1]] || 'N/A'} (${table.insights.lowestPrice['PRICE'] || ''})`);
+        }
+        if (insights.length > 0) {
+          insightsText = '\nInsights: ' + insights.join(' | ');
+        }
+      }
+
+      return `${title}\nHeaders: ${headers.join(' | ')}\n${rowsText}${insightsText}`;
+    }).join('\n\n');
+  }
+
+  // ── Combine everything ──
+  const fullText = [stitchedText, tablesText].filter(Boolean).join('\n\n');
+
   return {
     ...pageContext,
     sections: focusedSections,
-    textContent: clampText(stitchedText, maxChars),
-    textContentLength: stitchedText.length,
+    textContent: clampText(fullText, maxChars),
+    textContentLength: fullText.length,
   };
 }
 
@@ -176,6 +221,7 @@ function parseStructuredResponse(content) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function fetchLLM(endpoint, payload, signal) {
+  console.log('FULL CONTEXT SENT TO AI:', JSON.stringify(payload, null, 2));
   const response = await fetch(`${CopilotSw.CONFIG.BACKEND_URL}${endpoint}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

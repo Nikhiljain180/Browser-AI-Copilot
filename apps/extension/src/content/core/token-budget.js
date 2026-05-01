@@ -1,14 +1,16 @@
-function estimateTokens(text) {
-  return Math.ceil((String(text || '').length) / 4);
-}
-
-// Trim accessibility tree to fit MAX_PAGE_CONTEXT_TOKENS.
 function applyTokenBudget(tree) {
   const maxTokens = window.__MAX_PAGE_CONTEXT_TOKENS__ || 3000;
   let currentTokens = 0;
 
   currentTokens += estimateTokens(tree.url);
   currentTokens += estimateTokens(tree.title);
+
+  // Ensure all arrays exist (prevents "Cannot read properties of undefined" errors)
+  tree.buttons = tree.buttons || [];
+  tree.links = tree.links || [];
+  tree.elements = tree.elements || [];
+  tree.sections = tree.sections || [];
+  tree.textContent = tree.textContent || '';
 
   const budgets = {
     buttons: Math.floor(maxTokens * 0.1),
