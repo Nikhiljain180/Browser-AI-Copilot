@@ -212,7 +212,8 @@ CopilotSw.callLLM = async function callLLM(goal, pageContext, chatHistory) {
   try {
     const focusedPageContext = buildFocusedPageContext(goal, pageContext);
 
-    const payload = { goal, pageContext: focusedPageContext, chatHistory };
+    const llmHistory = chatHistory.filter(m => m.role !== 'navigation');
+    const payload = { goal, pageContext: focusedPageContext, chatHistory: llmHistory };
 
     // ── First attempt ──
     const data = await fetchLLM('/api/llm/stream', payload, controller.signal);

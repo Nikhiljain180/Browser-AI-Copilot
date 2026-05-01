@@ -28,11 +28,19 @@
 
     <!-- Messages -->
     <template v-else>
-      <ChatMessage
+      <template
         v-for="(message, index) in visibleMessages"
         :key="`${message.timestamp || index}-${message.role}-${index}`"
-        :message="message"
-      />
+      >
+        <div v-if="message.role === 'navigation'" class="nav-separator">
+          <span class="nav-separator-line" />
+          <span class="nav-separator-label">
+            Navigated to {{ message.title || message.url }}
+          </span>
+          <span class="nav-separator-line" />
+        </div>
+        <ChatMessage v-else :message="message" />
+      </template>
     </template>
 
     <!-- Pending message -->
