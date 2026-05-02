@@ -14,6 +14,7 @@ const DEFAULT_FORM_SESSION = {
   editField: null,
   submitButtons: [],
   targetButton: null,
+  pageUrl: null,
 };
 
 CopilotSw.ensureFormSessionState = function ensureFormSessionState() {
@@ -30,6 +31,7 @@ CopilotSw.ensureFormSessionState = function ensureFormSessionState() {
     if (!s.editField) s.editField = null;
     if (!Array.isArray(s.submitButtons)) s.submitButtons = [];
     if (!s.targetButton) s.targetButton = null;
+    if (typeof s.pageUrl !== 'string') s.pageUrl = null;
   }
   return CopilotSw.agentState.formSession;
 };
@@ -45,6 +47,7 @@ CopilotSw.setFormSession = function setFormSession(fields = [], active = true, m
   session.editField = meta.editField ? CopilotSw.normalizeFieldRef(meta.editField) : null;
   session.submitButtons = Array.isArray(meta.submitButtons) ? meta.submitButtons : (session.submitButtons || []);
   session.targetButton = meta.targetButton || session.targetButton || null;
+  if (typeof meta.pageUrl === 'string') session.pageUrl = meta.pageUrl;
   return session;
 };
 
@@ -85,11 +88,4 @@ CopilotSw.buildButtonLookup = function buildButtonLookup(buttons = []) {
     if (button?.selector) map.set(button.selector, button);
   });
   return map;
-};
-
-CopilotSw.splitUserValues = function splitUserValues(goal) {
-  return String(goal || '')
-    .split(/[\n,]+/)
-    .map(v => v.trim())
-    .filter(Boolean);
 };

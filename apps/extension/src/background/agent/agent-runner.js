@@ -326,11 +326,6 @@ CopilotSw.handleStartAgent = async function handleStartAgent(goal) {
       throw new Error('Agent is already running');
     }
 
-    // Clear any stale form session from a previous page or workflow.
-    // The form workflow re-detects forms fresh from the new readPage result,
-    // so carrying session state across agent runs causes cross-page bleed.
-    CopilotSw.clearFormSession();
-
     // ── Initialize state ──
     CopilotSw.agentState.isRunning = true;
     CopilotSw.agentState.currentGoal = goal;
@@ -349,6 +344,14 @@ CopilotSw.handleStartAgent = async function handleStartAgent(goal) {
       action: 'readPage',
       focusArea: null,
     });
+
+    // Clear any stale form session only when the page changes.
+    // Each user message starts a new agent run, so we must persist form state
+    // across turns on the same page, while still preventing cross-page bleed.
+    const sessionUrl = CopilotSw.agentState.formSession?.pageUrl;
+    if (sessionUrl && pageContext?.url && sessionUrl !== pageContext.url) {
+      CopilotSw.clearFormSession();
+    }
 
     CopilotSw.agentState.pageContext = pageContext;
 

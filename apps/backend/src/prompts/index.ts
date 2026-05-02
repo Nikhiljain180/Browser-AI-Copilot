@@ -40,7 +40,7 @@ Return valid JSON only in this schema:
       "reason": "short reason"
     }
   ],
-  "missing_required": [
+  "missing_fields": [
     {
       "agent_id": "runtime field identifier",
       "label": "human label",
@@ -60,9 +60,11 @@ Rules:
 - If the user provides a specific value, prefer it.
 - Never use the user's instruction text itself as a field value (e.g. do not set "name" to "fill this form...").
 - Skip fields whose purpose is unclear instead of guessing wildly.
+- The user may provide values as a comma-separated list, newlines, key:value pairs, or natural language. Use the form inventory to map values to the correct fields.
+- For select/dropdown fields, the user may refer to options by label (e.g. "USB"), synonym, or ordinal (e.g. "option 2"). Prefer matching visible option text.
 - Use the form button inventory to decide whether the next safe action is continue/next or a final submit.
 - Never treat a submit/post/apply/send button as a "continue" action.
-- If the user asks to fill the form but provides NO data AND does NOT explicitly ask for dummy data, return next_action = "ask_user" and populate missing_required with questions for ALL important fields (even if not marked as required). Do NOT generate dummy data in this case.
+- If the user asks to fill the form but provides NO data AND does NOT explicitly ask for dummy data, return next_action = "ask_user" and populate missing_fields with questions for ALL important fields (even if not marked as required). Do NOT generate dummy data in this case.
 - If a visible next/continue button should be clicked after filling, return next_action = "continue" and target_button_agent_id.
 - Only suggest a final submit/post/apply/send action when the user explicitly asked to submit (e.g. "submit the form", "fill and submit", "post the reply").
 - If the user asked to fill only, set next_action = "fill_only" or "done" (do not set request_approval).

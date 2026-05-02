@@ -132,12 +132,26 @@ function fillTextInput(element, value) {
  */
 function fillSelect(selectElement, value) {
   const options = Array.from(selectElement.options);
-  const searchVal = String(value).toLowerCase().trim();
+  const rawSearch = String(value);
+  const searchVal = rawSearch.toLowerCase().trim();
 
   let match = null;
 
+  // Level 0: Ordinal match (e.g., "option 2", "#3", "2")
+  const ordinalMatch =
+    rawSearch.match(/(?:\boption\b|\bopt\b|#)\s*(\d{1,3})\b/i) ||
+    rawSearch.match(/^\s*(\d{1,3})\b/);
+  if (ordinalMatch) {
+    const idx = Number.parseInt(ordinalMatch[1], 10);
+    if (Number.isFinite(idx) && idx >= 1 && idx <= options.length) {
+      match = options[idx - 1];
+    } else {
+      return { error: `Option index out of range for: "${value}"` };
+    }
+  }
+
   // Level 1: Exact match on value attribute
-  match = options.find(opt => opt.value.toLowerCase() === searchVal);
+  if (!match) match = options.find(opt => opt.value.toLowerCase() === searchVal);
 
   // Level 2: Exact match on visible text
   if (!match) {
@@ -146,24 +160,34 @@ function fillSelect(selectElement, value) {
 
   // Level 3: Option text contains search value
   if (!match) {
-    match = options.find(opt => opt.textContent.toLowerCase().includes(searchVal));
+    const matches = options.filter(opt => opt.textContent.toLowerCase().includes(searchVal));
+    if (matches.length === 1) match = matches[0];
+    if (matches.length > 1) {
+      const candidates = matches.slice(0, 5).map(opt => opt.textContent.trim()).filter(Boolean);
+      return { error: `Ambiguous option for: "${value}". Candidates: ${candidates.join(' | ')}` };
+    }
   }
 
   // Level 4: Search value contains option value/text
   if (!match) {
-    match = options.find(opt => {
+    const matches = options.filter(opt => {
       if (!opt.value) return false;
       const optVal = opt.value.toLowerCase();
       const optText = opt.textContent.toLowerCase().trim();
       return searchVal.includes(optVal) || searchVal.includes(optText);
     });
+    if (matches.length === 1) match = matches[0];
+    if (matches.length > 1) {
+      const candidates = matches.slice(0, 5).map(opt => opt.textContent.trim()).filter(Boolean);
+      return { error: `Ambiguous option for: "${value}". Candidates: ${candidates.join(' | ')}` };
+    }
   }
 
   // Level 5: Fuzzy keyword matching
   if (!match) {
     const searchWords = searchVal.split(/[\s,\-—/]+/).filter(w => w.length > 2);
-    let bestMatch = null;
     let bestScore = 0;
+    const bestMatches = [];
 
     options.forEach(opt => {
       if (!opt.value) return;
@@ -172,17 +196,27 @@ function fillSelect(selectElement, value) {
       searchWords.forEach(word => {
         if (optText.includes(word)) score++;
       });
+      if (score <= 0) return;
       if (score > bestScore) {
         bestScore = score;
-        bestMatch = opt;
+        bestMatches.length = 0;
+        bestMatches.push(opt);
+        return;
       }
+      if (score === bestScore) bestMatches.push(opt);
     });
 
-    if (bestScore > 0) match = bestMatch;
+    if (bestScore > 0 && bestMatches.length === 1) match = bestMatches[0];
+    if (bestScore > 0 && bestMatches.length > 1) {
+      const candidates = bestMatches.slice(0, 5).map(opt => opt.textContent.trim()).filter(Boolean);
+      return { error: `Ambiguous option for: "${value}". Candidates: ${candidates.join(' | ')}` };
+    }
   }
 
   if (match) {
     selectElement.value = match.value;
+    selectElement.dispatchEvent(new Event('input', { bubbles: true }));
+    selectElement.dispatchEvent(new Event('change', { bubbles: true }));
     return {
       success: true,
       message: `✓ Selected: "${match.textContent.trim()}" (value: ${match.value})`

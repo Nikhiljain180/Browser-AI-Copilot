@@ -74,9 +74,11 @@ CopilotSw.validateFormWorkflowPlan = function validateFormWorkflowPlan(plan, for
 
   const safePlan = {
     fields: validFields,
-    missingRequired: Array.isArray(plan?.missing_required)
-      ? plan.missing_required.map(CopilotSw.normalizeFieldRef)
-      : [],
+    missingFields: Array.isArray(plan?.missing_fields)
+      ? plan.missing_fields.map(CopilotSw.normalizeFieldRef)
+      : (Array.isArray(plan?.missing_required)
+        ? plan.missing_required.map(CopilotSw.normalizeFieldRef)
+        : []),
     nextAction: String(plan?.next_action || '').trim(),
     summary: String(plan?.summary || '').trim(),
     targetButton: null,

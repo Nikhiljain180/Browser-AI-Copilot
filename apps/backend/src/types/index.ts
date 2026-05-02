@@ -33,7 +33,7 @@ export interface FormField {
 
 export interface FormPlan {
   fields: FormField[];
-  missing_required: Array<{
+  missing_fields: Array<{
     agent_id: string;
     label: string;
     question: string;

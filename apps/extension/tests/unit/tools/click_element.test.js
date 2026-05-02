@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 // Inline the core of clickElement — tests the logic without needing the global registry
 function clickElement(element, description) {

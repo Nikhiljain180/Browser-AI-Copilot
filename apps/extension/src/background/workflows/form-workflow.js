@@ -29,76 +29,6 @@ async function clearFieldsInForm(formsInventory, tabId) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FOLLOW-UP ANSWER CONSUMER
-// ─────────────────────────────────────────────────────────────────────────────
-
-async function consumeFollowUpAnswers(goal, pageContext, tabId) {
-  const session = CopilotSw.ensureFormSessionState();
-
-  if (!session.active) return null;
-
-  const pending = Array.isArray(session.pendingFields) ? session.pendingFields : [];
-  if (pending.length === 0) {
-    session.active = false;
-    session.awaitingSubmitConfirmation = true;
-    session.lastAskedField = null;
-    return null;
-  }
-
-  const values = CopilotSw.splitUserValues(goal);
-  if (values.length === 0) {
-    const nextField = session.lastAskedField || pending[0];
-    session.lastAskedField = nextField || null;
-    return { type: 'chat', message: CopilotSw.askForField(nextField) };
-  }
-
-  const filled = [];
-  let remainingValues = [...values];
-
-  while (remainingValues.length > 0 && pending.length > 0) {
-    const field = pending.shift();
-    const value = remainingValues.shift();
-
-    if (!field || !value) continue;
-
-    const result = await fillOneField(tabId, field, value);
-    if (result?.error) continue;
-
-    filled.push({ field, value });
-    session.filledFields = session.filledFields || {};
-    session.filledFields[CopilotSw.fieldKey(field)] = value;
-
-    CopilotSw.agentState.chatHistory.push({
-      role: 'tool',
-      toolName: 'fill_input',
-      content: result,
-      timestamp: Date.now(),
-    });
-  }
-
-  session.pendingFields = pending;
-  session.lastAskedField = pending[0] || null;
-
-  if (filled.length === 0) {
-    const fallbackField = session.lastAskedField || (values[0] ? CopilotSw.normalizeFieldRef({ label: values[0] }) : null);
-    return { type: 'chat', message: CopilotSw.askForField(fallbackField) };
-  }
-
-  if (pending.length > 0) {
-    return { type: 'chat', message: CopilotSw.askForField(pending[0]) };
-  }
-
-  session.active = false;
-  session.awaitingSubmitConfirmation = true;
-  session.lastAskedField = null;
-
-  return {
-    type: 'chat',
-    message: 'Thanks! I have filled the form fields. Say "yes" or "submit" if you want me to submit the form.',
-  };
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // WORKFLOW HANDLERS
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -237,21 +167,20 @@ async function handleExplicitSubmit(goal, pageContext, formsInventory, session, 
   const plan = await CopilotSw.requestFormFillPlan(goal, formsInventory, CopilotSw.agentState.chatHistory);
   const workflowPlan = CopilotSw.validateFormWorkflowPlan(plan, formsInventory);
 
-  if (workflowPlan.missingRequired.length > 0) {
-    CopilotSw.setFormSession(workflowPlan.missingRequired, true, {
+  if (workflowPlan.missingFields.length > 0) {
+    CopilotSw.setFormSession(workflowPlan.missingFields, true, {
       submitButtons: workflowPlan.submitButtons,
       targetButton: workflowPlan.targetButton,
       awaitingSubmitConfirmation: false,
       editMode: false,
       editField: null,
+      pageUrl: pageContext?.url,
     });
     await CopilotSw.agentState.save();
 
-    const questions = workflowPlan.missingRequired
-      .slice(0, 3)
-      .map(item => `- ${CopilotSw.askForField(item)}`);
+    const questions = workflowPlan.missingFields.map(item => `- ${CopilotSw.askForField(item)}`);
 
-    return ['I found the form, but these required fields are missing:', ...questions].join('\n');
+    return ['I found the form, but I still need a few details:', ...questions].join('\n');
   }
 
   const submitButton = CopilotSw.resolveSubmitButton(pageContext, workflowPlan, session);
@@ -283,6 +212,23 @@ async function handleFreshFormFill(goal, pageContext, formsInventory, session, t
   const plan = await CopilotSw.requestFormFillPlan(goal, formsInventory, CopilotSw.agentState.chatHistory);
   const workflowPlan = CopilotSw.validateFormWorkflowPlan(plan, formsInventory);
   const responseLines = [];
+  let didFillAny = false;
+
+  const allFields = (formsInventory || []).flatMap(form => form?.fields || []);
+  const fallbackMissingFields = allFields
+    .filter(field => field && field.visible !== false && !field.disabled)
+    .filter(field => !CopilotSw.isFileUploadField(field))
+    .filter(field => {
+      // Don't treat placeholder text (especially for <select>) as "filled".
+      // The inventory already provides an isFilled boolean that handles selects correctly.
+      return field.isFilled !== true;
+    })
+    .map(field => CopilotSw.normalizeFieldRef({
+      agentId: field.agentId,
+      selector: field.selector,
+      label: field.label || field.name || field.placeholder || field.selector,
+      type: field.type,
+    }));
 
   // ── Fill fields from plan ──
   if (workflowPlan.fields.length > 0) {
@@ -298,6 +244,7 @@ async function handleFreshFormFill(goal, pageContext, formsInventory, session, t
       if (result?.error) continue;
 
       filledFields.push({ field: fieldPlan.label, value: fieldPlan.value });
+      didFillAny = true;
 
       CopilotSw.agentState.chatHistory.push({
         role: 'tool',
@@ -312,35 +259,41 @@ async function handleFreshFormFill(goal, pageContext, formsInventory, session, t
         workflowPlan.summary || 'Filled the form with the information provided:',
         ...filledFields.map(item => `- ${item.field}: ${item.value}`),
       ].join('\n'));
-
-      if (workflowPlan.nextAction !== 'continue' && !wantsSubmit) {
-        session.awaitingSubmitConfirmation = true;
-        session.active = false;
-        session.submitButtons = workflowPlan.submitButtons || [];
-        session.targetButton = workflowPlan.targetButton || null;
-        responseLines.push('Say "yes" or "submit" if you want me to submit the form.');
-      }
     }
   }
 
   // ── Ask for missing fields ──
-  if (workflowPlan.missingRequired.length > 0 || workflowPlan.nextAction === 'ask_user') {
-    CopilotSw.setFormSession(workflowPlan.missingRequired, true, {
+  const isNoDataFillRequest =
+    /\bfill\b/.test(normalizedGoal) &&
+    !/[:\n,]/.test(String(goal || '')) &&
+    !/@/.test(String(goal || '')) &&
+    !/\b\d{2,}\b/.test(String(goal || ''));
+
+  const missingFieldsToAsk =
+    isNoDataFillRequest
+      ? fallbackMissingFields
+      : (workflowPlan.missingFields.length > 0
+        ? workflowPlan.missingFields
+        : (workflowPlan.nextAction === 'ask_user' ? fallbackMissingFields : []));
+
+  if (missingFieldsToAsk.length > 0 || workflowPlan.nextAction === 'ask_user') {
+    CopilotSw.setFormSession(missingFieldsToAsk, true, {
       submitButtons: workflowPlan.submitButtons,
       targetButton: workflowPlan.targetButton,
       awaitingSubmitConfirmation: false,
       editMode: false,
       editField: null,
+      pageUrl: pageContext?.url,
     });
     await CopilotSw.agentState.save();
 
-    const questions = workflowPlan.missingRequired.length > 0
-      ? workflowPlan.missingRequired.slice(0, 3).map(item => `- ${CopilotSw.askForField(item)}`)
+    const questions = missingFieldsToAsk.length > 0
+      ? missingFieldsToAsk.map(item => `- ${CopilotSw.askForField(item)}`)
       : [];
 
     if (workflowPlan.summary) responseLines.push(workflowPlan.summary);
     if (questions.length > 0) {
-      responseLines.push('I found the form, but these required fields are missing:');
+      responseLines.push('I found the form, but I still need:');
       responseLines.push(...questions);
     } else {
       responseLines.push('I need a bit more information before I can continue.');
@@ -348,6 +301,11 @@ async function handleFreshFormFill(goal, pageContext, formsInventory, session, t
 
     return responseLines.filter(Boolean).join('\n\n');
   }
+
+  const hasFurtherStep =
+    (workflowPlan.nextAction === 'continue' && !!workflowPlan.targetButton) ||
+    workflowPlan.nextAction === 'request_approval' ||
+    wantsSubmit;
 
   // ── Continue / next button flow ──
   if (workflowPlan.nextAction === 'continue' && workflowPlan.targetButton) {
@@ -405,6 +363,18 @@ async function handleFreshFormFill(goal, pageContext, formsInventory, session, t
     session.submitButtons = workflowPlan.submitButtons || [];
     session.targetButton = workflowPlan.targetButton || null;
     responseLines.push('Say "yes" or "submit" if you want me to submit the form.');
+  } else if (!wantsSubmit && (workflowPlan.nextAction === 'fill_only' || workflowPlan.nextAction === 'done')) {
+    // Ensure a clear success message when the form is fully filled and no submit was requested.
+    CopilotSw.clearFormSession();
+    responseLines.push('Done. The form fields are filled.');
+  }
+
+  // If we filled something and there is nothing left to ask/click/submit, always emit a completion message.
+  if (!hasFurtherStep && didFillAny && !session?.awaitingSubmitConfirmation) {
+    CopilotSw.clearFormSession();
+    if (!responseLines.some(line => /done\./i.test(String(line)))) {
+      responseLines.push('Done. The form fields are filled.');
+    }
   }
 
   // ── Final response ──
@@ -431,30 +401,23 @@ CopilotSw.tryDirectFormWorkflow = async function tryDirectFormWorkflow(goal, pag
   const session = CopilotSw.agentState.formSession;
   const formsInventory = CopilotSw.buildFormsInventory(pageContext);
 
-  // ── Determine intent ──
-  const wantsEdit = CopilotSw.isFormEditGoal(normalizedGoal);
-  const wantsFill =
-    CopilotSw.isFormFillGoal(normalizedGoal) ||
-    wantsEdit ||
-    (CopilotSw.wasRecentFormFillConversation(CopilotSw.agentState.chatHistory) &&
-      CopilotSw.isFormValueFollowupGoal(normalizedGoal));
-  const wantsSubmit = CopilotSw.isFormSubmitGoal(normalizedGoal);
+  // ── Determine intent (minimal gating; LLM drives the steps) ──
+  const wantsFill = CopilotSw.isFormFillGoal(normalizedGoal) || !!session?.active;
+  const wantsSubmit = CopilotSw.isFormSubmitGoal(normalizedGoal) || CopilotSw.isSubmitIntent(goal);
   const wantsClear = CopilotSw.isFormClearGoal(normalizedGoal);
 
   // ── Bail out if not a form workflow ──
   if (
     !wantsFill &&
     !wantsSubmit &&
-    !CopilotSw.isSubmitIntent(goal) &&
     !wantsClear &&
     !session?.active &&
-    !session?.awaitingSubmitConfirmation &&
-    !session?.editMode
+    !session?.awaitingSubmitConfirmation
   ) {
     return null;
   }
 
-  if (!formsInventory.length && !session?.active && !session?.awaitingSubmitConfirmation && !session?.editMode) {
+  if (!formsInventory.length && !session?.active && !session?.awaitingSubmitConfirmation) {
     return 'I could not find any form fields on this page.';
   }
 
@@ -463,20 +426,13 @@ CopilotSw.tryDirectFormWorkflow = async function tryDirectFormWorkflow(goal, pag
     return handleClearFlow(pageContext, formsInventory, tabId);
   }
 
-  if (wantsEdit || session?.editMode) {
-    return handleEditFlow(goal, formsInventory, tabId);
-  }
-
   if (session?.awaitingSubmitConfirmation) {
     return handleSubmitConfirmation(goal, pageContext, session, tabId);
   }
 
   if (session?.active) {
-    const followUp = await consumeFollowUpAnswers(goal, pageContext, tabId);
-    if (followUp) {
-      await CopilotSw.agentState.save();
-      return followUp.message;
-    }
+    // LLM-driven loop: every user message gets a fresh plan until the form is complete.
+    return handleFreshFormFill(goal, pageContext, formsInventory, session, tabId);
   }
 
   if (wantsSubmit) {

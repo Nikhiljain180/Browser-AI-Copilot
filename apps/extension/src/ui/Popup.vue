@@ -5,8 +5,12 @@
       :offline="health.offline.value"
       :has-messages="chat.visibleMessages.value.length > 0"
       :status-label="statusLabel"
+      :show-activity="chat.showActivity.value"
+      :theme="theme.theme.value"
       @new-chat="startNewChat"
       @stop-agent="stopAgent"
+      @toggle-activity="toggleActivity"
+      @toggle-theme="theme.toggleTheme"
     />
 
     <ChatFeed
@@ -16,7 +20,8 @@
       :visible-messages="chat.visibleMessages.value"
       :live-phase-label="agent.livePhaseLabel.value"
       :live-status-detail="agent.liveStatusDetail.value"
-      :live-thought-lines="chat.liveThoughtLines.value"
+      :live-thought-lines="chat.showActivity.value ? chat.liveThoughtLines.value : []"
+      :show-activity="chat.showActivity.value"
     />
 
     <ComposerBar
@@ -60,12 +65,14 @@ import { useAgent } from './composables/useAgent.js';
 import { useChat } from './composables/useChat.js';
 import { useApproval } from './composables/useApproval.js';
 import { useHealth } from './composables/useHealth.js';
+import { useTheme } from './composables/useTheme.js';
 import { sendRuntimeMessage } from './composables/useRuntime.js';
 
 const agent = useAgent();
 const chat = useChat();
 const approval = useApproval();
 const health = useHealth();
+const theme = useTheme();
 
 const draft = ref('');
 const errorMessage = ref(null);
@@ -182,18 +189,15 @@ async function startNewChat() {
   }
 }
 
+function toggleActivity() {
+  chat.showActivity.value = !chat.showActivity.value;
+  if (!chat.showActivity.value) {
+    chat.resetLiveThoughts();
+  }
+}
+
 function handleRuntimeMessage(message) {
   if (message.action === 'pageContextChanged') {
-    return;
-  }
-
-  if (message.action === 'navigationSeparator') {
-    chat.messages.value.push({
-      role: 'navigation',
-      url: message.url,
-      title: message.title,
-      timestamp: Date.now(),
-    });
     return;
   }
 
@@ -260,7 +264,7 @@ onMounted(async () => {
 
   await chat.scrollChatToBottom();
   health.startHealthCheckPolling();
-});
+  theme.loadTheme();});
 
 onUnmounted(() => {
   chrome.runtime.onMessage.removeListener(handleRuntimeMessage);
