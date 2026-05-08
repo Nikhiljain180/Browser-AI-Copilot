@@ -6,25 +6,25 @@
 /* global chrome, CopilotSw */
 
 importScripts(
-  './sw-namespace.js',
-  './core/config.js',
-  './core/state.js',
-  './core/ui.js',
-  './core/tabs.js',
-  './utils/json.js',
-  './intents.js',
-  './tools/approvals.js',
-  './tools/tool-executor.js',
+  './sw-namespace.ts',
+  './core/config.ts',
+  './core/state.ts',
+  './core/ui.ts',
+  './core/tabs.ts',
+  './utils/json.ts',
+  './intents.ts',
+  './tools/approvals.ts',
+  './tools/tool-executor.ts',
   // Form workflow — order matters
-  './workflows/form-session.js',
-  './workflows/form-questions.js',
-  './workflows/form-buttons.js',
-  './workflows/form-fields.js',
-  './workflows/form-detection.js',
-  './workflows/form-api.js',
-  './workflows/form-workflow.js',
-  './llm/llm.js',
-  './agent/agent-runner.js',
+  './workflows/form-session.ts',
+  './workflows/form-questions.ts',
+  './workflows/form-buttons.ts',
+  './workflows/form-fields.ts',
+  './workflows/form-detection.ts',
+  './workflows/form-api.ts',
+  './workflows/form-workflow.ts',
+  './llm/llm.ts',
+  './agent/agent-runner.ts',
 );
 
 function handleStopAgent() {

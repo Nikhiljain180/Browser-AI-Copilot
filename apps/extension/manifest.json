@@ -17,26 +17,26 @@
     "default_path": "public/popup.html"
   },
   "background": {
-    "service_worker": "src/background/service-worker.js"
+    "service_worker": "src/background/service-worker.ts"
   },
   "content_scripts": [
   {
     "matches": ["<all_urls>"],
     "js": [
-      "src/content/core/utils.js",
-      "src/content/core/sanitizer.js",
-      "src/content/core/registry.js",
-      "src/content/core/selector.js",
-      "src/content/core/token-budget.js",
-      "src/content/observers/navigation.js",
-      "src/content/tools/read_page.js",
-      "src/content/tools/click_element.js",
-      "src/content/tools/fill_input.js",
-      "src/content/tools/extract_data.js",
-      "src/content/tools/draft_reply.js",
-      "src/content/tools/summarize_page.js",
-      "src/content/tools/reset_form.js",
-      "src/content/content-script.js"
+      "src/content/core/utils.ts",
+      "src/content/core/sanitizer.ts",
+      "src/content/core/registry.ts",
+      "src/content/core/selector.ts",
+      "src/content/core/token-budget.ts",
+      "src/content/observers/navigation.ts",
+      "src/content/tools/read_page.ts",
+      "src/content/tools/click_element.ts",
+      "src/content/tools/fill_input.ts",
+      "src/content/tools/extract_data.ts",
+      "src/content/tools/draft_reply.ts",
+      "src/content/tools/summarize_page.ts",
+      "src/content/tools/reset_form.ts",
+      "src/content/content-script.ts"
     ],
     "run_at": "document_idle"
    }

@@ -1,5 +1,5 @@
 import { ref, computed, nextTick } from 'vue';
-import { sendRuntimeMessage } from './useRuntime.js';
+import { sendRuntimeMessage } from './useRuntime.ts';
 
 export function useChat() {
   const messages = ref([]);

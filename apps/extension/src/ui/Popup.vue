@@ -56,11 +56,11 @@ import ComposerBar from './components/ComposerBar.vue';
 import ApprovalModal from './components/ApprovalModal.vue';
 import ErrorBanner from './components/ErrorBanner.vue';
 
-import { useAgent } from './composables/useAgent.js';
-import { useChat } from './composables/useChat.js';
-import { useApproval } from './composables/useApproval.js';
-import { useHealth } from './composables/useHealth.js';
-import { sendRuntimeMessage } from './composables/useRuntime.js';
+import { useAgent } from './composables/useAgent.ts';
+import { useChat } from './composables/useChat.ts';
+import { useApproval } from './composables/useApproval.ts';
+import { useHealth } from './composables/useHealth.ts';
+import { sendRuntimeMessage } from './composables/useRuntime.ts';
 
 const agent = useAgent();
 const chat = useChat();

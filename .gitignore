@@ -85,3 +85,6 @@ playwright-report/
 # Temporary files
 *.tmp
 *.temp
+
+# Stakpak session files
+.stakpak/session*

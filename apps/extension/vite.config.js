@@ -8,15 +8,17 @@ import vue from '@vitejs/plugin-vue';
 import path from 'path';
 
 export default defineConfig({
-  plugins: [vue()],
-  
+  plugins: [
+    vue(),
+  ],
+
   build: {
     outDir: './public/dist',
-    emptyOutDir: false, // Preserve manifest.json, icons
-    
+    emptyOutDir: false,
+
     rollupOptions: {
       input: {
-        popup: path.resolve(__dirname, 'src/ui/popup.js'),
+        popup: path.resolve(__dirname, 'src/ui/popup.ts'),
       },
       output: {
         entryFileNames: '[name].js',

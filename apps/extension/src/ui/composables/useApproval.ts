@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue';
-import { sendRuntimeMessage } from './useRuntime.js';
+import { sendRuntimeMessage } from './useRuntime.ts';
 
 export function useApproval() {
   const approvalRequest = ref(null);

@@ -15,11 +15,13 @@
     "vue": "^3.3.8"
   },
   "devDependencies": {
+    "@types/chrome": "^0.1.42",
     "@vitejs/plugin-vue": "^5.0.0",
     "@vue/test-utils": "^2.4.1",
     "jsdom": "^29.1.1",
     "typescript": "^5.3.3",
     "vite": "^5.0.0",
+    "vite-plugin-web-extension": "^4.5.1",
     "vitest": "^1.0.0"
   }
 }

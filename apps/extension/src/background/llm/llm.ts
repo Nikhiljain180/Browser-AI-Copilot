@@ -221,7 +221,6 @@ function parseStructuredResponse(content) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function fetchLLM(endpoint, payload, signal) {
-  console.log('FULL CONTEXT SENT TO AI:', JSON.stringify(payload, null, 2));
   const response = await fetch(`${CopilotSw.CONFIG.BACKEND_URL}${endpoint}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

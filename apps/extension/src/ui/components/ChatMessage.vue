@@ -59,7 +59,7 @@
 
 <script setup>
 import { computed } from 'vue';
-import { useFormatters } from '../composables/useFormatters.js';
+import { useFormatters } from '../composables/useFormatters.ts';
 
 const props = defineProps({
   message: { type: Object, required: true },
