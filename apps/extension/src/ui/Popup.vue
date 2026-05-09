@@ -187,16 +187,6 @@ function handleRuntimeMessage(message) {
     return;
   }
 
-  if (message.action === 'navigationSeparator') {
-    chat.messages.value.push({
-      role: 'navigation',
-      url: message.url,
-      title: message.title,
-      timestamp: Date.now(),
-    });
-    return;
-  }
-
   if (message.action === 'updateReasoning') {
     agent.currentThought.value = message.thought || '';
     agent.currentAction.value = message.actionName || message.action || '';
