@@ -9,6 +9,10 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [vue()],
+
+  test: {
+    environment: 'jsdom',
+  },
   
   build: {
     outDir: './public/dist',
