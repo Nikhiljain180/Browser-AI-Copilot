@@ -32,13 +32,14 @@
         v-for="(message, index) in visibleMessages"
         :key="`${message.timestamp || index}-${message.role}-${index}`"
       >
-        <ChatMessage :message="message" />
+        <ActivityCard v-if="showActivity && message.role === 'tool'" :message="message" />
+        <ChatMessage v-else-if="message.role !== 'tool'" :message="message" />
       </template>
     </template>
 
     <!-- Pending message -->
     <PendingMessage
-      v-if="isRunning"
+      v-if="isRunning && showActivity"
       :live-phase-label="livePhaseLabel"
       :live-status-detail="liveStatusDetail"
       :live-thought-lines="liveThoughtLines"
@@ -52,11 +53,13 @@
 import { ref, onMounted } from 'vue';
 import ChatMessage from './ChatMessage.vue';
 import PendingMessage from './PendingMessage.vue';
+import ActivityCard from './ActivityCard.vue';
 
 defineProps({
   isHydrated: { type: Boolean, default: false },
   isRunning: { type: Boolean, default: false },
   visibleMessages: { type: Array, default: () => [] },
+  showActivity: { type: Boolean, default: true },
   livePhaseLabel: { type: String, default: 'Working' },
   liveStatusDetail: { type: String, default: '' },
   liveThoughtLines: { type: Array, default: () => [] },
