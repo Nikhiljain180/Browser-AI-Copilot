@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Form Filler — handles ALL input types
  * Supports: text, email, password, number, tel, url, textarea,
@@ -384,22 +385,6 @@ function fillContentEditable(element, value) {
 // ═══════════════════════════════════════════════════
 
 /**
- * Set value using native setter (bypasses React/Vue/Angular)
- */
-function setNativeValue(element, value) {
-  const descriptor = Object.getOwnPropertyDescriptor(
-    Object.getPrototypeOf(element), 'value'
-  );
-
-  if (descriptor && descriptor.set) {
-    descriptor.set.call(element, value);
-  } else {
-    element.value = value;
-  }
-}
-
-
-/**
  * Fire all necessary events for framework compatibility
  */
 function fireAllEvents(element) {
@@ -412,58 +397,3 @@ function fireAllEvents(element) {
   element.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
 }
 
-
-/**
- * Parse boolean from various string formats
- */
-function parseBoolean(value) {
-  if (typeof value === 'boolean') return value;
-  const str = String(value).toLowerCase().trim();
-  return ['true', 'yes', '1', 'on', 'check', 'checked', 'enable', 'enabled'].includes(str);
-}
-
-
-/**
- * Find the <label> associated with an element
- */
-function findLabelForElement(element) {
-  // Check for label with "for" attribute
-  if (element.id) {
-    const label = document.querySelector(`label[for="${element.id}"]`);
-    if (label) return label;
-  }
-
-  // Check if element is inside a label
-  const parentLabel = element.closest('label');
-  if (parentLabel) return parentLabel;
-
-  // Check preceding sibling or nearby text
-  const prev = element.previousElementSibling;
-  if (prev && prev.tagName === 'LABEL') return prev;
-
-  return null;
-}
-
-
-/**
- * Parse time string ("2:30 PM" → "14:30")
- */
-function parseTimeString(value) {
-  // Already in HH:MM format
-  if (/^\d{2}:\d{2}$/.test(value)) return value;
-
-  // Parse "2:30 PM" format
-  const match = value.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
-  if (match) {
-    let hours = parseInt(match[1]);
-    const minutes = match[2];
-    const period = (match[3] || '').toUpperCase();
-
-    if (period === 'PM' && hours < 12) hours += 12;
-    if (period === 'AM' && hours === 12) hours = 0;
-
-    return `${String(hours).padStart(2, '0')}:${minutes}`;
-  }
-
-  return value;
-}

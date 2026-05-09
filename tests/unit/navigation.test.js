@@ -188,6 +188,7 @@ describe('Form session — cross-page bleed prevention', () => {
   beforeEach(() => {
     agentState = {
       formSession: { ...DEFAULT_FORM_SESSION },
+      url: null,
     };
   });
 
@@ -196,35 +197,60 @@ describe('Form session — cross-page bleed prevention', () => {
     return agentState.formSession;
   }
 
-  it('clears active form session on new agent start', () => {
+  function shouldClearFormSession(prevUrl, nextUrl) {
+    const restrictedPrefixes = ['chrome://', 'chrome-extension://', 'edge://', 'about:'];
+    const isRestrictedUrl = (url = '') => restrictedPrefixes.some(prefix => url.startsWith(prefix));
+    return !nextUrl || isRestrictedUrl(nextUrl) || (!!prevUrl && nextUrl !== prevUrl);
+  }
+
+  it('preserves form session across turns on the same URL', () => {
+    agentState.url = 'https://example.com/form';
     agentState.formSession.active = true;
     agentState.formSession.pendingFields = [{ label: 'email' }];
 
-    clearFormSession();
+    const nextUrl = 'https://example.com/form';
+    if (shouldClearFormSession(agentState.url, nextUrl)) clearFormSession();
+
+    expect(agentState.formSession.active).toBe(true);
+    expect(agentState.formSession.pendingFields).toEqual([{ label: 'email' }]);
+  });
+
+  it('clears active form session when URL changes', () => {
+    agentState.url = 'https://example.com/form';
+    agentState.formSession.active = true;
+    agentState.formSession.pendingFields = [{ label: 'email' }];
+
+    const nextUrl = 'https://example.com/other';
+    if (shouldClearFormSession(agentState.url, nextUrl)) clearFormSession();
 
     expect(agentState.formSession.active).toBe(false);
     expect(agentState.formSession.pendingFields).toEqual([]);
   });
 
-  it('clears awaitingSubmitConfirmation on new agent start', () => {
+  it('clears awaitingSubmitConfirmation when URL changes', () => {
+    agentState.url = 'https://example.com/form';
     agentState.formSession.awaitingSubmitConfirmation = true;
 
-    clearFormSession();
+    const nextUrl = 'https://example.com/other';
+    if (shouldClearFormSession(agentState.url, nextUrl)) clearFormSession();
 
     expect(agentState.formSession.awaitingSubmitConfirmation).toBe(false);
   });
 
-  it('clears editMode on new agent start', () => {
+  it('clears editMode when URL changes', () => {
+    agentState.url = 'https://example.com/form';
     agentState.formSession.editMode = true;
     agentState.formSession.editField = { label: 'name' };
 
-    clearFormSession();
+    const nextUrl = 'https://example.com/other';
+    if (shouldClearFormSession(agentState.url, nextUrl)) clearFormSession();
 
     expect(agentState.formSession.editMode).toBe(false);
     expect(agentState.formSession.editField).toBeNull();
   });
 
-  it('resets all fields to default state', () => {
+  it('resets all fields to default state when URL changes', () => {
+    agentState.url = 'https://example.com/form';
     agentState.formSession = {
       active: true,
       pendingFields: [{ label: 'name' }, { label: 'email' }],
@@ -237,7 +263,8 @@ describe('Form session — cross-page bleed prevention', () => {
       targetButton: { selector: '#submit' },
     };
 
-    clearFormSession();
+    const nextUrl = 'https://example.com/other';
+    if (shouldClearFormSession(agentState.url, nextUrl)) clearFormSession();
 
     expect(agentState.formSession).toEqual(DEFAULT_FORM_SESSION);
   });

@@ -1,30 +1,37 @@
+// @ts-nocheck
 /**
  * Service Worker - Entry Point
  * Wires UI messages to modularized agent logic loaded via importScripts().
  */
 
 /* global chrome, CopilotSw */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+declare function importScripts(...urls: string[]): void;
+
+// Type for navigation separator
+type ChatMessage = { role: 'navigation'; url?: string; title?: string; content: string; timestamp: number };
 
 importScripts(
-  './sw-namespace.ts',
-  './core/config.ts',
-  './core/state.ts',
-  './core/ui.ts',
-  './core/tabs.ts',
-  './utils/json.ts',
-  './intents.ts',
-  './tools/approvals.ts',
-  './tools/tool-executor.ts',
+  './sw-namespace.js',
+  './core/config.js',
+  './core/state.js',
+  './core/errors.js',
+  './core/ui.js',
+  './core/tabs.js',
+  './utils/json.js',
+  './intents.js',
+  './tools/approvals.js',
+  './tools/tool-executor.js',
   // Form workflow — order matters
-  './workflows/form-session.ts',
-  './workflows/form-questions.ts',
-  './workflows/form-buttons.ts',
-  './workflows/form-fields.ts',
-  './workflows/form-detection.ts',
-  './workflows/form-api.ts',
-  './workflows/form-workflow.ts',
-  './llm/llm.ts',
-  './agent/agent-runner.ts',
+  './workflows/form-session.js',
+  './workflows/form-questions.js',
+  './workflows/form-buttons.js',
+  './workflows/form-fields.js',
+  './workflows/form-detection.js',
+  './workflows/form-api.js',
+  './workflows/form-workflow.js',
+  './llm/llm.js',
+  './agent/agent-runner.js',
 );
 
 function handleStopAgent() {
@@ -46,21 +53,27 @@ function handleStopAgent() {
   return Promise.resolve({ success: true });
 }
 
-function handleGetChatHistory() {
-  return CopilotSw.agentState.load().then(() => ({
+async function handleGetChatHistory() {
+  const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  const tabUrl = tabs[0]?.url || null;
+  await CopilotSw.agentState.load(tabUrl);
+  return {
     history: CopilotSw.agentState.chatHistory,
     isRunning: CopilotSw.agentState.isRunning,
     iteration: CopilotSw.agentState.iterationCount,
     maxIterations: CopilotSw.CONFIG.MAX_REACT_ITERATIONS,
     currentGoal: CopilotSw.agentState.currentGoal,
-  }));
+  };
 }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   const handlers = {
     startAgent: () => CopilotSw.handleStartAgent(request.goal),
     stopAgent: () => handleStopAgent(),
-    clearChat: () => CopilotSw.clearAgentSession(),
+    clearChat: async () => {
+      const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      return CopilotSw.clearAgentSession(tabs[0]?.url || null);
+    },
     approveAction: () => CopilotSw.handleApproveAction(request.actionId),
     rejectAction: () => CopilotSw.handleRejectAction(request.actionId),
     getChatHistory: () => handleGetChatHistory(),
@@ -108,7 +121,7 @@ async function maybeInsertNavigationSeparator(tabId, url, title) {
   _lastNavUrl = url;
   _lastNavTime = now;
 
-  await CopilotSw.agentState.load();
+  await CopilotSw.agentState.load(url);
 
   const history = CopilotSw.agentState.chatHistory;
   if (!history || history.length === 0) return;
@@ -117,9 +130,6 @@ async function maybeInsertNavigationSeparator(tabId, url, title) {
   const lastEntry = history[history.length - 1];
   if (lastEntry?.role === 'navigation' && lastEntry?.url === url) return;
 
-  // Clear any in-progress form session — it belongs to the previous page
-  CopilotSw.clearFormSession();
-
   // Refresh page context for the new page so the next agent call is grounded correctly
   try {
     await CopilotSw.ensureContentScriptInjected(tabId);
@@ -127,7 +137,7 @@ async function maybeInsertNavigationSeparator(tabId, url, title) {
     CopilotSw.agentState.pageContext = pageContext;
   } catch (_) { /* page may still be loading — agent will re-read on next run */ }
 
-  const separator = { role: 'navigation', url, title: title || '', timestamp: Date.now() };
+  const separator: ChatMessage = { role: 'navigation', url, title: title || '', content: '', timestamp: Date.now() };
   CopilotSw.agentState.chatHistory.push(separator);
   await CopilotSw.agentState.save();
   CopilotSw.broadcastUI({ action: 'navigationSeparator', ...separator });

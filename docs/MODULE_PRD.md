@@ -110,7 +110,7 @@ Content scripts operate in the current page DOM. Cross-origin iframes remain a b
 ## 5.3 Dynamic SPA Pages
 
 **Current handling:**
-- `navigation.js` hooks `pushState`, `replaceState`, `popstate`, `hashchange`
+- `navigation.ts` hooks `pushState`, `replaceState`, `popstate`, `hashchange`
 - `MutationObserver` watches DOM updates
 - Service worker refreshes page context on `pageContextChanged`
 

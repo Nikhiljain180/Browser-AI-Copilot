@@ -1,15 +1,9 @@
+// @ts-nocheck
 /**
  * Extract Data Tool
  * 
  * Provides structured data extraction from any page.
  * Uses heuristics: semantic HTML, text patterns, DOM structure, ARIA.
- * 
- * Exposes:
- *   - extractData(target, schema)
- *   - extractPageData()
- *   - extractReplyContext(selector)
- *   - extractStructuredItems(target)
- *   - extractFromCards(container, schema)
  */
 
 

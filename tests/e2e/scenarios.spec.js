@@ -135,6 +135,102 @@ test.describe('Browser AI Copilot E2E Tests', () => {
   });
 });
 
+test('Scenario 5: Page reading tool', async () => {
+    // SETUP: Open fixture page
+    const page = await context.newPage();
+    const fixturePath = path.resolve(__dirname, '../fixtures/ecommerce.html');
+    await page.route('http://ecommerce.local/', route => route.fulfill({ path: fixturePath }));
+    await page.goto('http://ecommerce.local/');
+
+    const popupPage = await context.newPage();
+    await popupPage.goto(`chrome-extension://${extensionId}/public/popup.html`);
+
+    // TEST: Request page content
+    await popupPage.fill('[data-testid="composer-input"]', 'What products are on this page?');
+    await page.bringToFront();
+    await popupPage.click('[data-testid="composer-send"]');
+
+    // VERIFY: Agent reads page and responds
+    const lastMessage = popupPage.locator('[data-testid="chat-message-assistant"]').last();
+    await expect(lastMessage).toContainText(/products|items|shopping/i, { timeout: 20000 });
+
+    await page.close();
+    await popupPage.close();
+  });
+
+  test('Scenario 6: Multi-turn conversation', async () => {
+    // SETUP: Open fixture page
+    const page = await context.newPage();
+    const fixturePath = path.resolve(__dirname, '../fixtures/ecommerce.html');
+    await page.route('http://ecommerce.local/', route => route.fulfill({ path: fixturePath }));
+    await page.goto('http://ecommerce.local/');
+
+    const popupPage = await context.newPage();
+    await popupPage.goto(`chrome-extension://${extensionId}/public/popup.html`);
+
+    // TEST: First message
+    await popupPage.fill('[data-testid="composer-input"]', 'What is the page title?');
+    await page.bringToFront();
+    await popupPage.click('[data-testid="composer-send"]');
+    await expect(popupPage.locator('[data-testid="chat-message-assistant"]').last()).toContainText(/title|page/i, { timeout: 15000 });
+
+    // TEST: Second message (should remember context)
+    await popupPage.fill('[data-testid="composer-input"]', 'Now tell me about the products');
+    await page.bringToFront();
+    await popupPage.click('[data-testid="composer-send"]');
+    await expect(popupPage.locator('[data-testid="chat-message-assistant"]').last()).toContainText(/product|item/i, { timeout: 15000 });
+
+    await page.close();
+    await popupPage.close();
+  });
+
+  test('Scenario 7: Agent stop functionality', async () => {
+    // SETUP: Open fixture page
+    const page = await context.newPage();
+    const fixturePath = path.resolve(__dirname, '../fixtures/ecommerce.html');
+    await page.route('http://ecommerce.local/', route => route.fulfill({ path: fixturePath }));
+    await page.goto('http://ecommerce.local/');
+
+    const popupPage = await context.newPage();
+    await popupPage.goto(`chrome-extension://${extensionId}/public/popup.html`);
+
+    // TEST: Start a long-running task then stop
+    await popupPage.fill('[data-testid="composer-input"]', 'Find all products and list their details');
+    await page.bringToFront();
+    await popupPage.click('[data-testid="composer-send"]');
+
+    // Wait briefly for agent to start
+    await page.waitForTimeout(1000);
+
+    // TEST: Click stop button
+    await popupPage.click('[data-testid="stop-button"]');
+
+    // VERIFY: Agent stops and shows stopped status
+    await expect(popupPage.locator('[data-testid="status-indicator"]')).toContainText(/stopped|idle/i, { timeout: 10000 });
+
+    await page.close();
+    await popupPage.close();
+  });
+
+  test('Scenario 8: Clear chat functionality', async () => {
+    const popupPage = await context.newPage();
+    await popupPage.goto(`chrome-extension://${extensionId}/public/popup.html`);
+
+    // TEST: Send a message first
+    await popupPage.fill('[data-testid="composer-input"]', 'Hello');
+    await popupPage.click('[data-testid="composer-send"]');
+    await page.waitForTimeout(2000);
+
+    // TEST: Click clear chat
+    await popupPage.click('[data-testid="clear-chat-button"]');
+
+    // VERIFY: Chat is cleared (no messages visible)
+    const messages = popupPage.locator('[data-testid="chat-message"]');
+    await expect(messages).toHaveCount(0);
+
+    await popupPage.close();
+  });
+
 test.describe('Backend Proxy Validation', () => {
   test('should return valid LLM response schema', async ({ request }) => {
     const response = await request.post('http://localhost:3000/api/llm/stream', {

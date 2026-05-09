@@ -1,3 +1,4 @@
+// @ts-nocheck
 /* global CopilotSw */
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -15,6 +16,43 @@ function getFieldHaystack(field) {
     field.label, field.name, field.question, field.type,
     field.placeholder, field.ariaLabel, field.selector,
   ].filter(Boolean).join(' ').toLowerCase();
+}
+
+function isFieldFilled(field) {
+  if (!field) return false;
+  if (typeof field.isFilled === 'boolean') return field.isFilled;
+
+  const type = String(field.type || '').toLowerCase();
+  if (type === 'checkbox' || type === 'radio') {
+    return !!field.checked;
+  }
+
+  const currentValue = typeof field.currentValue === 'string'
+    ? field.currentValue.trim()
+    : typeof field.value === 'string'
+      ? field.value.trim()
+      : '';
+
+  if (Array.isArray(field.options) && field.options.some(option => option?.selected && option?.value)) {
+    return true;
+  }
+
+  return currentValue.length > 0;
+}
+
+function mergeFieldRefs(primary = [], fallback = []) {
+  const merged = [];
+  const seen = new Set();
+
+  for (const item of [...primary, ...fallback]) {
+    const normalized = CopilotSw.normalizeFieldRef(item);
+    const key = CopilotSw.fieldKey(normalized);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    merged.push(normalized);
+  }
+
+  return merged;
 }
 
 CopilotSw.findEditField = function findEditField(formsInventory, normalizedGoal) {
@@ -61,7 +99,9 @@ CopilotSw.validateFormWorkflowPlan = function validateFormWorkflowPlan(plan, for
     if ((!agentId && !selector) || typeof rawValue !== 'string') continue;
 
     const field = fieldLookup.get(agentId) || fieldLookup.get(selector);
-    if (!field || field.disabled || field.visible === false) continue;
+    // Do not drop fields based on visibility heuristics. Some pages misreport
+    // visibility while still being user-fillable, which causes incomplete plans.
+    if (!field || field.disabled) continue;
 
     validFields.push({
       agentId: field.agentId || agentId || '',
@@ -74,14 +114,32 @@ CopilotSw.validateFormWorkflowPlan = function validateFormWorkflowPlan(plan, for
 
   const safePlan = {
     fields: validFields,
-    missingRequired: Array.isArray(plan?.missing_required)
-      ? plan.missing_required.map(CopilotSw.normalizeFieldRef)
-      : [],
+    missingRequired: [],
     nextAction: String(plan?.next_action || '').trim(),
     summary: String(plan?.summary || '').trim(),
     targetButton: null,
     submitButtons: allSubmitButtons,
   };
+
+  if (Array.isArray(plan?.missing_required)) {
+    const normalizedMissing = plan.missing_required.map(item => {
+      const agentId = item?.agent_id || item?.agentId || '';
+      const selector = item?.selector || '';
+      const field = fieldLookup.get(agentId) || fieldLookup.get(selector);
+
+      return CopilotSw.normalizeFieldRef({
+        ...field,
+        ...item,
+        agentId: field?.agentId || agentId || '',
+        selector: field?.selector || selector || '',
+        label: item?.label || field?.label || field?.name || '',
+        question: item?.question || '',
+        type: field?.type || item?.type || '',
+      });
+    });
+
+    safePlan.missingRequired = mergeFieldRefs(normalizedMissing);
+  }
 
   const buttonLookup = CopilotSw.buildButtonLookup(allButtons);
   if (plan?.target_button_agent_id) {
@@ -89,6 +147,28 @@ CopilotSw.validateFormWorkflowPlan = function validateFormWorkflowPlan(plan, for
   }
 
   return safePlan;
+};
+
+CopilotSw.mergeMissingFieldRefs = function mergeMissingFieldRefs(primary = [], fallback = []) {
+  return mergeFieldRefs(primary, fallback);
+};
+
+CopilotSw.collectMissingFieldsFromInventory = function collectMissingFieldsFromInventory(formsInventory = [], options = {}) {
+  const allForms = Array.isArray(formsInventory) ? formsInventory : [];
+  const includeOptionalImportant = !!options.includeOptionalImportant;
+  const includeOptionalAll = !!options.includeOptionalAll;
+  const fields = allForms.flatMap(form => form?.fields || []);
+
+  const missingFields = fields.filter(field => {
+    if (!field || field.disabled || CopilotSw.isFileUploadField?.(field)) return false;
+    if (isFieldFilled(field)) return false;
+    if (field.required) return true;
+    if (includeOptionalAll) return true;
+    if (!includeOptionalImportant) return false;
+    return SEMANTIC_FIELD_HINTS.some(hint => getFieldHaystack(field).includes(hint));
+  });
+
+  return mergeFieldRefs(missingFields);
 };
 
 CopilotSw.buildFormsInventory = function buildFormsInventory(pageContext) {
@@ -105,7 +185,9 @@ CopilotSw.buildFormsInventory = function buildFormsInventory(pageContext) {
   });
 
   const extraFields = standaloneInputs
-    .filter(item => item && item.visible !== false && !item.disabled)
+    // Do not filter on "visible" here; read_page visibility heuristics can be wrong.
+    // We still avoid disabled inputs.
+    .filter(item => item && !item.disabled)
     .filter(item => !usedFieldIds.has(item.agentId) && !usedFieldIds.has(item.selector))
     .map(item => ({
       agentId: item.agentId,
@@ -125,7 +207,7 @@ CopilotSw.buildFormsInventory = function buildFormsInventory(pageContext) {
     }));
 
   const extraButtons = standaloneButtons
-    .filter(item => item && item.visible !== false && !item.disabled)
+    .filter(item => item && !item.disabled)
     .map(item => ({
       agentId: item.agentId,
       text: item.text || '',

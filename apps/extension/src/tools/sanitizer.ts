@@ -3,7 +3,13 @@
  * Sanitizes all extracted DOM content to prevent prompt injection attacks
  */
 
-let DOMPurifyLib = null;
+interface DOMPurifyInstance {
+  sanitize: (dirty: string, config?: { ALLOWED_TAGS?: string[]; ALLOWED_ATTR?: string[] }) => string;
+}
+
+declare const DOMPurify: DOMPurifyInstance | undefined;
+
+let DOMPurifyLib: DOMPurifyInstance | null = null;
 
 // Attempt to load DOMPurify if available
 if (typeof DOMPurify !== 'undefined') {
@@ -94,6 +100,11 @@ class ContentSanitizer {
 }
 
 // Export for use in content script and service worker
+interface ModuleExports {
+  exports: typeof ContentSanitizer;
+}
+
+declare const module: ModuleExports | undefined;
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = ContentSanitizer;
 }

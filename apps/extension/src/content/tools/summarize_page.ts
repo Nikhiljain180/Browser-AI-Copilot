@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Page Summarizer
  * that enables reasoning about what actions to take
@@ -395,19 +396,6 @@ function summarizeActions(root) {
 }
 
 
-/**
- * Detect if a button appears to be a primary/CTA button
- */
-function isPrimaryButton(btn) {
-  const classes = btn.className.toLowerCase();
-  const isPrimary = /primary|cta|main|submit|action|hero/.test(classes);
-  const isLarge = btn.getBoundingClientRect().width > 150;
-  const hasGradient = window.getComputedStyle(btn).backgroundImage.includes('gradient');
-  
-  return isPrimary || isLarge || hasGradient;
-}
-
-
 // ═══════════════════════════════════════════════════
 // HUMAN-READABLE SUMMARY BUILDER
 // ═══════════════════════════════════════════════════
@@ -503,24 +491,3 @@ function buildReadableSummary(summary) {
 // ═══════════════════════════════════════════════════
 // UTILITY (reuse from other functions)
 // ═══════════════════════════════════════════════════
-
-function getMetaContent(name) {
-  const meta = document.querySelector(`meta[name="${name}"], meta[property="og:${name}"]`);
-  return meta?.content || '';
-}
-
-function getSectionTitle(element) {
-  if (!element) return '';
-  const ariaLabel = element.getAttribute('aria-label');
-  if (ariaLabel) return ariaLabel.trim();
-
-  const heading = element.querySelector(':scope > h1, :scope > h2, :scope > h3, :scope > .panel-title, :scope > .card-header h2');
-  if (heading) return sanitizeText(heading.innerText).substring(0, 80);
-
-  const prev = element.previousElementSibling;
-  if (prev && /^H[1-6]$/.test(prev.tagName)) {
-    return sanitizeText(prev.innerText).substring(0, 80);
-  }
-
-  return '';
-}

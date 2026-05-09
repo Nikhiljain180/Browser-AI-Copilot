@@ -49,6 +49,10 @@ CopilotSw.wasRecentFormFillConversation = function wasRecentFormFillConversation
 };
 
 CopilotSw.isFormValueFollowupGoal = function isFormValueFollowupGoal(goal) {
+  // Safety net: once a form workflow is active, treat any user input as a follow-up
+  // so we don't fall back to the generic agent due to brittle heuristics.
+  if (CopilotSw.agentState?.formSession?.active) return true;
+
   const normalized = String(goal || '').trim();
   return normalized.startsWith('with ') ||
     normalized.includes(':') ||

@@ -8,20 +8,20 @@ const RESTRICTED_PREFIXES = ['chrome://', 'chrome-extension://', 'edge://', 'abo
 
 // All content script files in load order, matching manifest.json
 const CONTENT_SCRIPT_FILES = [
-  'src/content/core/sanitizer.js',
-  'src/content/core/registry.js',
-  'src/content/core/selector.js',
-  'src/content/core/utils.js',
-  'src/content/core/token-budget.js',
-  'src/content/observers/navigation.js',
-  'src/content/tools/read_page.js',
-  'src/content/tools/click_element.js',
-  'src/content/tools/fill_input.js',
-  'src/content/tools/extract_data.js',
-  'src/content/tools/draft_reply.js',
-  'src/content/tools/summarize_page.js',
-  'src/content/tools/reset_form.js',
-  'src/content/content-script.js',
+  'dist/content/core/sanitizer.js',
+  'dist/content/core/registry.js',
+  'dist/content/core/selector.js',
+  'dist/content/core/utils.js',
+  'dist/content/core/token-budget.js',
+  'dist/content/observers/navigation.js',
+  'dist/content/tools/read_page.js',
+  'dist/content/tools/click_element.js',
+  'dist/content/tools/fill_input.js',
+  'dist/content/tools/extract_data.js',
+  'dist/content/tools/draft_reply.js',
+  'dist/content/tools/summarize_page.js',
+  'dist/content/tools/reset_form.js',
+  'dist/content/content-script.js',
 ];
 
 const INJECTION_ERROR_PATTERNS = [
@@ -37,10 +37,9 @@ CopilotSw.isRestrictedUrl = function isRestrictedUrl(url = '') {
 CopilotSw.ensureContentScriptInjected = async function ensureContentScriptInjected(tabId) {
   const tab = await chrome.tabs.get(tabId);
   if (tab?.url && CopilotSw.isRestrictedUrl(tab.url)) {
-    throw new Error('Open the Copilot on a normal web page, then try again.');
+    throw CopilotSw.createPermissionError('Open the Copilot on a normal web page, then try again.', CopilotSw.ErrorCode.PERMISSION_RESTRICTED_URL, { url: tab.url });
   }
 
-  // Probe whether the content script is already alive
   const alive = await chrome.tabs.sendMessage(tabId, { action: 'ping' })
     .then(() => true)
     .catch(() => false);
@@ -52,11 +51,11 @@ CopilotSw.ensureContentScriptInjected = async function ensureContentScriptInject
       target: { tabId },
       files: CONTENT_SCRIPT_FILES,
     });
-  } catch (injectionError) {
-    const msg = injectionError?.message || '';
+  } catch (injectionError: unknown) {
+    const msg = injectionError instanceof Error ? injectionError.message : '';
     const isRestricted = INJECTION_ERROR_PATTERNS.some(pattern => msg.includes(pattern));
     if (isRestricted) {
-      throw new Error('Open the Copilot on a normal web page, then try again.');
+      throw CopilotSw.createPermissionError('Open the Copilot on a normal web page, then try again.', CopilotSw.ErrorCode.PERMISSION_INJECTION_BLOCKED, { url: tab.url, detail: msg });
     }
     throw injectionError;
   }
@@ -74,7 +73,7 @@ CopilotSw.getUsableTab = async function getUsableTab() {
     .sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0))[0];
 
   if (!fallbackTab) {
-    throw new Error('No active tab found');
+    throw CopilotSw.createPermissionError('No active tab found', CopilotSw.ErrorCode.PERMISSION_RESTRICTED_URL);
   }
 
   return fallbackTab;
@@ -83,8 +82,9 @@ CopilotSw.getUsableTab = async function getUsableTab() {
 CopilotSw.sendMessageToTab = async function sendMessageToTab(tabId, message) {
   try {
     return await chrome.tabs.sendMessage(tabId, message);
-  } catch (error) {
-    if (!error.message?.includes('Receiving end does not exist')) {
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : '';
+    if (!errMsg.includes('Receiving end does not exist')) {
       throw error;
     }
 

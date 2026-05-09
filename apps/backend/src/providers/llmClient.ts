@@ -1,4 +1,5 @@
 import config from '../config';
+import { ProviderError, ErrorCode } from '../utils/errors';
 
 let llmClient: any = null;
 
@@ -11,7 +12,7 @@ function getProviderApiKey(provider: string = config.llm.provider): string | und
 export function initializeLLM(provider: string = config.llm.provider): void {
   const apiKey = getProviderApiKey(provider);
   if (!apiKey) {
-    throw new Error(`Missing API key for provider: ${provider}`);
+    throw new ProviderError(`Missing API key for provider: ${provider}`, ErrorCode.PROVIDER_AUTH_ERROR, { provider });
   }
 
   if (provider === 'openai') {
@@ -21,7 +22,7 @@ export function initializeLLM(provider: string = config.llm.provider): void {
     const Anthropic = require('@anthropic-ai/sdk').default;
     llmClient = new Anthropic({ apiKey });
   } else {
-    throw new Error(`Unsupported LLM provider: ${provider}`);
+    throw new ProviderError(`Unsupported LLM provider: ${provider}`, ErrorCode.PROVIDER_UNSUPPORTED, { provider });
   }
 }
 

@@ -1,50 +1,52 @@
 <template>
-  <div class="copilot-shell">
-    <ShellHeader
-      :is-running="agent.isRunning.value"
-      :offline="health.offline.value"
-      :has-messages="chat.visibleMessages.value.length > 0"
-      :status-label="statusLabel"
-      @new-chat="startNewChat"
-      @stop-agent="stopAgent"
-    />
+  <ErrorBoundary>
+    <div class="copilot-shell">
+      <ShellHeader
+        :is-running="agent.isRunning.value"
+        :offline="health.offline.value"
+        :has-messages="chat.visibleMessages.value.length > 0"
+        :status-label="statusLabel"
+        @new-chat="startNewChat"
+        @stop-agent="stopAgent"
+      />
 
-    <ChatFeed
-      ref="chatFeedRef"
-      :is-hydrated="chat.isHydrated.value"
-      :is-running="agent.isRunning.value"
-      :visible-messages="chat.visibleMessages.value"
-      :live-phase-label="agent.livePhaseLabel.value"
-      :live-status-detail="agent.liveStatusDetail.value"
-      :live-thought-lines="chat.liveThoughtLines.value"
-    />
+      <ChatFeed
+        ref="chatFeedRef"
+        :is-hydrated="chat.isHydrated.value"
+        :is-running="agent.isRunning.value"
+        :visible-messages="chat.visibleMessages.value"
+        :live-phase-label="agent.livePhaseLabel.value"
+        :live-status-detail="agent.liveStatusDetail.value"
+        :live-thought-lines="chat.liveThoughtLines.value"
+      />
 
-    <ComposerBar
-      v-model="draft"
-      :is-running="agent.isRunning.value"
-      :can-send="canSend"
-      @submit="submitPrompt"
-    />
+      <ComposerBar
+        v-model="draft"
+        :is-running="agent.isRunning.value"
+        :can-send="canSend"
+        @submit="submitPrompt"
+      />
 
-    <ApprovalModal
-      :approval-request="approval.approvalRequest.value"
-      :risk-label="approval.approvalRiskLabel.value"
-      :headline="approval.approvalHeadline.value"
-      :description="approval.approvalDescription.value"
-      :risk-explanation="approval.approvalRiskExplanation.value"
-      @approve="approval.approveApproval"
-      @reject="approval.rejectApproval"
-    />
+      <ApprovalModal
+        :approval-request="approval.approvalRequest.value"
+        :risk-label="approval.approvalRiskLabel.value"
+        :headline="approval.approvalHeadline.value"
+        :description="approval.approvalDescription.value"
+        :risk-explanation="approval.approvalRiskExplanation.value"
+        @approve="approval.approveApproval"
+        @reject="approval.rejectApproval"
+      />
 
-    <ErrorBanner
-      :offline="health.offline.value"
-      :error-message="errorMessage"
-      :can-retry="canRetryLastPrompt"
-      @retry-health="health.checkBackendHealth"
-      @retry="retryLastPrompt"
-      @dismiss="clearError"
-    />
-  </div>
+      <ErrorBanner
+        :offline="health.offline.value"
+        :error-message="errorMessage"
+        :can-retry="canRetryLastPrompt"
+        @retry-health="health.checkBackendHealth"
+        @retry="retryLastPrompt"
+        @dismiss="clearError"
+      />
+    </div>
+  </ErrorBoundary>
 </template>
 
 <script setup>
@@ -55,6 +57,7 @@ import ChatFeed from './components/ChatFeed.vue';
 import ComposerBar from './components/ComposerBar.vue';
 import ApprovalModal from './components/ApprovalModal.vue';
 import ErrorBanner from './components/ErrorBanner.vue';
+import ErrorBoundary from './components/ErrorBoundary.vue';
 
 import { useAgent } from './composables/useAgent.ts';
 import { useChat } from './composables/useChat.ts';

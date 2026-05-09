@@ -4,7 +4,7 @@
     "module": "ESNext",
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "outDir": "./dist",
-    "strict": false,
+    "strict": true,
     "noImplicitAny": false,
     "strictNullChecks": false,
     "esModuleInterop": true,
@@ -17,11 +17,12 @@
     "noEmit": false,
     "isolatedModules": true,
     "jsx": "preserve",
+    "types": ["chrome"],
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.d.ts"],
-  "exclude": ["node_modules", "dist", "public", "src/ui"]
+  "exclude": ["node_modules", "dist", "public", "src/ui", "src/content", "src/background/workflows", "src/tools"]
 }

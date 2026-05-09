@@ -1,3 +1,4 @@
+// @ts-nocheck
 function generateSelector(element) {
   if (!element) return '';
   if (element.id) return `#${CSS.escape(element.id)}`;

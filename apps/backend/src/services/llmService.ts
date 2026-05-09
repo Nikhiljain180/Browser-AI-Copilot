@@ -3,7 +3,9 @@ import { getClient } from '../providers/llmClient';
 import { SYSTEM_PROMPT, FORM_FILL_SYSTEM_PROMPT } from '../prompts';
 import { delay, normalizeMessageContent, inferQueryType, isRetryableLLMError } from '../utils/helpers';
 import { summarizePageContext } from '../utils/pageContext';
-import { ChatMessage, PageContext, LLMCallOptions, ConversationMessage } from '../types';
+import { ChatMessage, PageContext, LLMCallOptions, ConversationMessage, LLMProviderResponse, ToolCall } from '../types';
+import { ProviderError, ErrorCode } from '../utils/errors';
+import { getToolsForProvider, ToolDefinition } from './toolDefinitions';
 
 export function buildConversationMessages(
   goal: string,
@@ -77,7 +79,7 @@ export async function callLLMWithTimeout(
     const timeoutId = setTimeout(() => {}, timeoutMs);
 
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error(`LLM request timed out after ${timeoutMs}ms`)), timeoutMs);
+      setTimeout(() => reject(new ProviderError(`LLM request timed out after ${timeoutMs}ms`, ErrorCode.PROVIDER_TIMEOUT, { timeoutMs })), timeoutMs);
     });
 
     try {
@@ -98,7 +100,7 @@ export async function callLLMWithTimeout(
           messages: messages.slice(1).map(m => ({ role: m.role, content: m.content })),
         });
       } else {
-        throw new Error(`Unsupported provider: ${provider}`);
+        throw new ProviderError(`Unsupported provider: ${provider}`, ErrorCode.PROVIDER_UNSUPPORTED, { provider });
       }
 
       const response = await Promise.race([requestPromise, timeoutPromise]);
@@ -111,7 +113,7 @@ export async function callLLMWithTimeout(
         return response.content[0].text;
       }
 
-      throw new Error(`Unsupported provider: ${provider}`);
+      throw new ProviderError(`Unsupported provider: ${provider}`, ErrorCode.PROVIDER_UNSUPPORTED, { provider });
     } catch (error: any) {
       if (attempt === MAX_RETRIES || !isRetryableLLMError(error)) {
         throw error;
@@ -123,5 +125,102 @@ export async function callLLMWithTimeout(
     }
   }
 
-  throw new Error('LLM call failed after all retries');
+  throw new ProviderError('LLM call failed after all retries', ErrorCode.PROVIDER_API_ERROR, { retries: MAX_RETRIES });
+}
+
+export async function callLLMWithTools(
+  messages: ConversationMessage[],
+  timeoutMs: number,
+  tools: ToolDefinition[],
+  options: LLMCallOptions = {}
+): Promise<LLMProviderResponse> {
+  const provider = config.llm.provider;
+  const model = config.llm.model;
+  const client = getClient();
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new ProviderError(`LLM request timed out after ${timeoutMs}ms`, ErrorCode.PROVIDER_TIMEOUT, { timeoutMs })), timeoutMs);
+  });
+
+  try {
+    let requestPromise: Promise<any>;
+
+    if (provider === 'openai') {
+      requestPromise = client.chat.completions.create({
+        model,
+        messages: messages.map(m => ({ role: m.role, content: m.content })),
+        tools: tools.map(t => ({ type: 'function' as const, function: t.function })),
+        temperature: options.temperature ?? 0.7,
+        max_tokens: options.max_tokens ?? 1000,
+      });
+    } else if (provider === 'anthropic') {
+      requestPromise = client.messages.create({
+        model,
+        max_tokens: options.max_tokens ?? 1000,
+        system: messages[0].content,
+        messages: messages.slice(1).map(m => ({ role: m.role, content: m.content })),
+        tools: tools.map(t => ({
+          name: t.function.name,
+          description: t.function.description,
+          input_schema: t.function.parameters,
+        })),
+      });
+    } else {
+      throw new ProviderError(`Unsupported provider: ${provider}`, ErrorCode.PROVIDER_UNSUPPORTED, { provider });
+    }
+
+    const response = await Promise.race([requestPromise, timeoutPromise]);
+
+    if (provider === 'openai') {
+      const message = response.choices[0].message;
+      const result: LLMProviderResponse = { content: message.content || null };
+
+      if (message.tool_calls && message.tool_calls.length > 0) {
+        result.toolCalls = message.tool_calls.map((tc: any) => ({
+          id: tc.id,
+          type: 'function' as const,
+          function: {
+            name: tc.function.name,
+            arguments: safeParseJSON(tc.function.arguments),
+          },
+        }));
+      }
+
+      return result;
+    }
+
+    if (provider === 'anthropic') {
+      const content = response.content;
+      const textBlock = content.find((b: any) => b.type === 'text');
+      const toolUseBlocks = content.filter((b: any) => b.type === 'tool_use');
+
+      const result: LLMProviderResponse = { content: textBlock?.text || null };
+
+      if (toolUseBlocks.length > 0) {
+        result.toolCalls = toolUseBlocks.map((tb: any) => ({
+          id: tb.id,
+          type: 'function' as const,
+          function: {
+            name: tb.name,
+            arguments: tb.input as Record<string, unknown>,
+          },
+        }));
+      }
+
+      return result;
+    }
+
+    throw new ProviderError(`Unsupported provider: ${provider}`, ErrorCode.PROVIDER_UNSUPPORTED, { provider });
+  } catch (error: any) {
+    if (error instanceof ProviderError) throw error;
+    throw new ProviderError(error.message || 'LLM call failed', ErrorCode.PROVIDER_API_ERROR, { provider });
+  }
+}
+
+function safeParseJSON(text: string): Record<string, unknown> {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { raw: text };
+  }
 }

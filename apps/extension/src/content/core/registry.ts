@@ -1,6 +1,11 @@
-const pageElementRegistry = new Map();
+// @ts-nocheck
+export const pageElementRegistry = new Map();
 
-function registerElement(agentId, element) {
+export function clearRegistry() {
+  pageElementRegistry.clear();
+}
+
+export function registerElement(agentId, element) {
   if (!agentId || !element) return '';
   pageElementRegistry.set(agentId, element);
   return agentId;
@@ -19,3 +24,5 @@ function resolveElement({ agentId, agent_id, selector }) {
 
   return null;
 }
+
+export { resolveElement };

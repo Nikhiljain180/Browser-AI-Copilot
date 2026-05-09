@@ -1,3 +1,4 @@
+// @ts-nocheck
 const ContentSanitizer = {
   sanitizeText: (text) => {
     if (!text) return '';

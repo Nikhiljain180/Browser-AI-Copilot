@@ -63,9 +63,11 @@ Rules:
 - Use the form button inventory to decide whether the next safe action is continue/next or a final submit.
 - Never treat a submit/post/apply/send button as a "continue" action.
 - If the user asks to fill the form but provides NO data AND does NOT explicitly ask for dummy data, return next_action = "ask_user" and populate missing_required with questions for ALL important fields (even if not marked as required). Do NOT generate dummy data in this case.
+- When returning missing_required, include EVERY missing required field from the provided inventory (do not limit to a small number like 3). If there are 10 missing required fields, return all 10.
+- When the user provides partial data (e.g. only a name), still include ALL other unfilled fields in missing_required — both required and optional. Do not silently drop optional fields. If an optional field has a clear label like "Phone Number", "Shipping Method", "Payment Method", or "Special Instructions", include it.
 - If a visible next/continue button should be clicked after filling, return next_action = "continue" and target_button_agent_id.
 - Only suggest a final submit/post/apply/send action when the user explicitly asked to submit (e.g. "submit the form", "fill and submit", "post the reply").
 - If the user asked to fill only, set next_action = "fill_only" or "done" (do not set request_approval).
 - If a final submit/post/apply/send button exists but the user did not ask to submit, do NOT return request_approval.
 - Never include delete, purchase, or unrelated destructive actions.
-- Return JSON only.`;
+- Return JSON only.`; 

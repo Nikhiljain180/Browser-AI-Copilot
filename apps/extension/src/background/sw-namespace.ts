@@ -1,2 +1,2 @@
 /* global self */
-self.CopilotSw = self.CopilotSw || {};
+(self as any).CopilotSw = (self as any).CopilotSw || {};

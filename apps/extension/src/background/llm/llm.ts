@@ -230,11 +230,13 @@ async function fetchLLM(endpoint, payload, signal) {
 
   if (!response.ok) {
     let errorMessage = `LLM API error: ${response.statusText}`;
+    let errorCode = CopilotSw.ErrorCode.PROVIDER_API_ERROR;
     try {
       const errorData = await response.json();
       errorMessage = errorData.error || errorData.message || errorMessage;
+      if (errorData.code) errorCode = errorData.code;
     } catch { /* ignore parse error */ }
-    throw new Error(errorMessage);
+    throw CopilotSw.createProviderError(errorMessage, errorCode, { status: response.status, endpoint });
   }
 
   return response.json();
@@ -242,11 +244,36 @@ async function fetchLLM(endpoint, payload, signal) {
 
 function buildAbortError() {
   if (!CopilotSw.agentState.isRunning) {
-    return new Error('Agent stopped by user');
+    return new CopilotSw.AppError('Agent stopped by user', CopilotSw.ErrorCode.AGENT_STOPPED_BY_USER, false);
   }
-  return new Error(
-    'The request timed out because the page is too large or the model is slow. Please try again.'
+  return CopilotSw.createProviderError(
+    'The request timed out because the page is too large or the model is slow. Please try again.',
+    CopilotSw.ErrorCode.PROVIDER_TIMEOUT
   );
+}
+
+function nativeToolCallToResponse(toolCall) {
+  const fn = toolCall.function || {};
+  const args = typeof fn.arguments === 'object' && fn.arguments !== null ? fn.arguments : {};
+
+  if (fn.name === 'final_answer') {
+    return {
+      thought: args.thought || '',
+      action: 'final_answer',
+      action_input: {},
+      answer: args.answer || '',
+    };
+  }
+
+  const toolName = fn.name;
+  const actionInput = { ...args };
+
+  return {
+    thought: '',
+    action: toolName,
+    action_input: actionInput,
+    answer: null,
+  };
 }
 
 CopilotSw.callLLM = async function callLLM(goal, pageContext, chatHistory) {
@@ -260,23 +287,32 @@ CopilotSw.callLLM = async function callLLM(goal, pageContext, chatHistory) {
     const llmHistory = chatHistory.filter(m => m.role !== 'navigation');
     const payload = { goal, pageContext: focusedPageContext, chatHistory: llmHistory };
 
-    // ── First attempt ──
-    const data = await fetchLLM('/api/llm/stream', payload, controller.signal);
+    const data = await fetchLLM('/api/llm/generate', payload, controller.signal);
+
+    // ── Prefer native tool calls ──
+    if (data.toolCalls && data.toolCalls.length > 0) {
+      const firstCall = data.toolCalls[0];
+      const parsed = nativeToolCallToResponse(firstCall);
+      if (parsed && parsed.action) {
+        return parsed;
+      }
+    }
+
+    // ── Fall back to JSON parsing ──
     let parsed = parseStructuredResponse(data.content);
 
-    // ── Retry if parse failed ──
-    if (!parsed) {
+    if (!parsed && data.content) {
       const retryData = await fetchLLM('/api/llm/retry', payload, controller.signal);
       parsed = parseStructuredResponse(retryData.content);
     }
 
     if (!parsed) {
-      throw new Error('I got an unexpected model response. Please try again.');
+      throw CopilotSw.createProviderError('I got an unexpected model response. Please try again.', CopilotSw.ErrorCode.PROVIDER_PARSE_ERROR);
     }
 
     return parsed;
-  } catch (error) {
-    if (error.name === 'AbortError') {
+  } catch (error: unknown) {
+    if (error instanceof Error && error.name === 'AbortError') {
       throw buildAbortError();
     }
     throw error;

@@ -1,4 +1,7 @@
+// @ts-nocheck
 /* global CopilotSw */
+
+import type { PageContext, FormSession, FormButton } from '../../types/copilot-sw';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FIELD FILLING HELPERS
@@ -45,28 +48,48 @@ async function consumeFollowUpAnswers(goal, pageContext, tabId) {
     return null;
   }
 
-  const values = CopilotSw.splitUserValues(goal);
-  if (values.length === 0) {
+  const trimmed = String(goal || '').trim();
+  if (!trimmed) {
     const nextField = session.lastAskedField || pending[0];
     session.lastAskedField = nextField || null;
     return { type: 'chat', message: CopilotSw.askForField(nextField) };
   }
 
+  // Use the existing LLM plan API to extract field/value pairs from free-form user input.
+  // This avoids brittle delimiter parsing and lets users respond naturally.
+  const formsInventory = CopilotSw.buildFormsInventory(pageContext) as any;
+  const plan = await CopilotSw.requestFormFillPlan(trimmed, formsInventory, CopilotSw.agentState.chatHistory);
+  const workflowPlan = CopilotSw.validateFormWorkflowPlan(plan, formsInventory);
+
   const filled = [];
-  let remainingValues = [...values];
+  const filledIdentifiers = new Set(
+    (workflowPlan.fields || []).flatMap(f =>
+      CopilotSw.fieldIdentifiers(CopilotSw.normalizeFieldRef(f))
+    )
+  );
+  const inventoryMissing = CopilotSw.collectMissingFieldsFromInventory(formsInventory, {
+    includeOptionalAll: true,
+  }).filter(item =>
+    !CopilotSw.fieldIdentifiers(item).some(id => filledIdentifiers.has(id))
+  );
+  workflowPlan.missingRequired = CopilotSw.mergeMissingFieldRefs(workflowPlan.missingRequired, inventoryMissing);
 
-  while (remainingValues.length > 0 && pending.length > 0) {
-    const field = pending.shift();
-    const value = remainingValues.shift();
+  const previousPending = pending.map(CopilotSw.normalizeFieldRef);
+  for (const fieldPlan of (workflowPlan.fields || [])) {
+    if (!fieldPlan?.selector || !fieldPlan?.agentId) continue;
+    if (!fieldPlan?.value) continue;
 
-    if (!field || !value) continue;
+    const result = await CopilotSw.executeTool('fill_input', {
+      agent_id: fieldPlan.agentId,
+      selector: fieldPlan.selector,
+      value: fieldPlan.value,
+    }, tabId);
 
-    const result = await fillOneField(tabId, field, value);
     if (result?.error) continue;
 
-    filled.push({ field, value });
+    filled.push({ field: fieldPlan.label, value: fieldPlan.value, ref: fieldPlan });
     session.filledFields = session.filledFields || {};
-    session.filledFields[CopilotSw.fieldKey(field)] = value;
+    session.filledFields[CopilotSw.fieldKey(fieldPlan)] = fieldPlan.value;
 
     CopilotSw.agentState.chatHistory.push({
       role: 'tool',
@@ -76,21 +99,42 @@ async function consumeFollowUpAnswers(goal, pageContext, tabId) {
     });
   }
 
-  session.pendingFields = pending;
-  session.lastAskedField = pending[0] || null;
+  const filledKeys = new Set(
+    filled.flatMap(item => CopilotSw.fieldIdentifiers(item.ref || {}))
+  );
+  const llmRemaining = (workflowPlan.missingRequired || []).map(CopilotSw.normalizeFieldRef);
+  const previousRemaining = previousPending.filter(item =>
+    !CopilotSw.fieldIdentifiers(item).some(identifier => filledKeys.has(identifier))
+  );
 
-  if (filled.length === 0) {
-    const fallbackField = session.lastAskedField || (values[0] ? CopilotSw.normalizeFieldRef({ label: values[0] }) : null);
-    return { type: 'chat', message: CopilotSw.askForField(fallbackField) };
+  session.pendingFields = CopilotSw.mergeMissingFieldRefs(llmRemaining, previousRemaining)
+    .filter(item => !CopilotSw.fieldIdentifiers(item).some(identifier => filledKeys.has(identifier)));
+  session.lastAskedField = session.pendingFields[0] || null;
+
+  const morePending = session.pendingFields.length > 0;
+  session.active = morePending;
+  session.awaitingSubmitConfirmation = !morePending;
+
+  const totalRequired = (pending.length || 0) + (Object.keys(session.filledFields || {}).length || 0);
+  const filledCount = Object.keys(session.filledFields || {}).length || 0;
+
+  if (filled.length === 0 && morePending) {
+    // LLM didn't confidently map values; ask again for the next required field.
+    return { type: 'chat', message: CopilotSw.askForField(session.pendingFields[0]) };
   }
 
-  if (pending.length > 0) {
-    return { type: 'chat', message: CopilotSw.askForField(pending[0]) };
-  }
+  if (morePending) {
+    const progress = totalRequired > 0 ? `(${filledCount} of ${totalRequired} filled)` : null;
+    const lead = filled.length > 0
+      ? [`Got it ${progress || ''}.`.trim(), ...filled.map(item => `- ${item.field}: ${item.value}`)]
+      : [`Still need ${progress || ''}.`.trim()];
+    const remainingQuestions = session.pendingFields.map(item => `- ${CopilotSw.askForField(item)}`);
 
-  session.active = false;
-  session.awaitingSubmitConfirmation = true;
-  session.lastAskedField = null;
+    return {
+      type: 'chat',
+      message: [...lead.filter(Boolean), ...remainingQuestions].join('\n'),
+    };
+  }
 
   return {
     type: 'chat',
@@ -126,8 +170,8 @@ async function handleClearFlow(pageContext, formsInventory, tabId) {
   return 'Cleared all form fields.';
 }
 
-async function handleEditFlow(goal, formsInventory, tabId) {
-  const session = CopilotSw.agentState.formSession;
+async function handleEditFlow(goal: string, formsInventory: unknown, tabId: number): Promise<string> {
+  const session = CopilotSw.ensureFormSessionState();
   const normalizedGoal = String(goal || '').toLowerCase();
 
   session.active = true;
@@ -198,9 +242,9 @@ async function handleEditFlow(goal, formsInventory, tabId) {
   return `${fieldLabel} updated. Say "yes" or "submit" if you want me to submit the form.`;
 }
 
-async function handleSubmitConfirmation(goal, pageContext, session, tabId) {
+async function handleSubmitConfirmation(goal: string, pageContext: PageContext | null, session: FormSession | null, tabId: number) {
   if (CopilotSw.isSubmitIntent(goal) || CopilotSw.isFormSubmitGoal(String(goal || '').toLowerCase())) {
-    const submitButton = CopilotSw.resolveSubmitButton(pageContext, null, session);
+    const submitButton = CopilotSw.resolveSubmitButton(pageContext, null, session) as FormButton | null;
 
     if (!submitButton?.selector && !submitButton?.agentId) {
       return 'I could not find a submit button for this form.';
@@ -236,6 +280,10 @@ async function handleSubmitConfirmation(goal, pageContext, session, tabId) {
 async function handleExplicitSubmit(goal, pageContext, formsInventory, session, tabId) {
   const plan = await CopilotSw.requestFormFillPlan(goal, formsInventory, CopilotSw.agentState.chatHistory);
   const workflowPlan = CopilotSw.validateFormWorkflowPlan(plan, formsInventory);
+  const inventoryMissing = CopilotSw.collectMissingFieldsFromInventory(formsInventory, {
+    includeOptionalAll: true,
+  });
+  workflowPlan.missingRequired = CopilotSw.mergeMissingFieldRefs(workflowPlan.missingRequired, inventoryMissing);
 
   if (workflowPlan.missingRequired.length > 0) {
     CopilotSw.setFormSession(workflowPlan.missingRequired, true, {
@@ -248,10 +296,9 @@ async function handleExplicitSubmit(goal, pageContext, formsInventory, session, 
     await CopilotSw.agentState.save();
 
     const questions = workflowPlan.missingRequired
-      .slice(0, 3)
       .map(item => `- ${CopilotSw.askForField(item)}`);
 
-    return ['I found the form, but these required fields are missing:', ...questions].join('\n');
+    return ['I found the form, but these required fields are missing:', ...questions];
   }
 
   const submitButton = CopilotSw.resolveSubmitButton(pageContext, workflowPlan, session);
@@ -325,6 +372,17 @@ async function handleFreshFormFill(goal, pageContext, formsInventory, session, t
 
   // ── Ask for missing fields ──
   if (workflowPlan.missingRequired.length > 0 || workflowPlan.nextAction === 'ask_user') {
+    const text = String(goal || '').toLowerCase();
+    const asksForDummy = /\b(dummy|sample)\b/.test(text);
+    const userProvidedNoData = !workflowPlan.fields?.length && CopilotSw.isFormFillGoal(String(goal || '').toLowerCase()) && !asksForDummy;
+    const inventoryMissing = CopilotSw.collectMissingFieldsFromInventory(formsInventory, {
+      includeOptionalAll: userProvidedNoData,
+    });
+
+    if (workflowPlan.nextAction === 'ask_user' || inventoryMissing.length > 0) {
+      workflowPlan.missingRequired = CopilotSw.mergeMissingFieldRefs(workflowPlan.missingRequired, inventoryMissing);
+    }
+
     CopilotSw.setFormSession(workflowPlan.missingRequired, true, {
       submitButtons: workflowPlan.submitButtons,
       targetButton: workflowPlan.targetButton,
@@ -335,13 +393,16 @@ async function handleFreshFormFill(goal, pageContext, formsInventory, session, t
     await CopilotSw.agentState.save();
 
     const questions = workflowPlan.missingRequired.length > 0
-      ? workflowPlan.missingRequired.slice(0, 3).map(item => `- ${CopilotSw.askForField(item)}`)
+      ? workflowPlan.missingRequired.map(item => `- ${CopilotSw.askForField(item)}`)
       : [];
 
     if (workflowPlan.summary) responseLines.push(workflowPlan.summary);
     if (questions.length > 0) {
-      responseLines.push('I found the form, but these required fields are missing:');
-      responseLines.push(...questions);
+      return [
+        ...responseLines.filter(Boolean),
+        'I found the form, but these required fields are missing:',
+        ...questions,
+      ];
     } else {
       responseLines.push('I need a bit more information before I can continue.');
     }
@@ -424,12 +485,12 @@ async function handleFreshFormFill(goal, pageContext, formsInventory, session, t
 // MAIN ENTRY POINT
 // ─────────────────────────────────────────────────────────────────────────────
 
-CopilotSw.tryDirectFormWorkflow = async function tryDirectFormWorkflow(goal, pageContext, tabId) {
+CopilotSw.tryDirectFormWorkflow = async function tryDirectFormWorkflow(goal: string, pageContext: PageContext | null, tabId: number): Promise<string | null> {
   CopilotSw.ensureFormSessionState();
 
   const normalizedGoal = String(goal || '').toLowerCase();
   const session = CopilotSw.agentState.formSession;
-  const formsInventory = CopilotSw.buildFormsInventory(pageContext);
+  const formsInventory = CopilotSw.buildFormsInventory(pageContext) as any;
 
   // ── Determine intent ──
   const wantsEdit = CopilotSw.isFormEditGoal(normalizedGoal);

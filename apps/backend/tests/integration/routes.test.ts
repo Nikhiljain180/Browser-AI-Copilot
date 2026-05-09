@@ -14,9 +14,9 @@ describe('Health Route', () => {
 });
 
 describe('LLM Routes', () => {
-  it('POST /api/llm/stream should return 400 without goal', async () => {
+  it('POST /api/llm/generate should return 400 without goal', async () => {
     const res = await request(app)
-      .post('/api/llm/stream')
+      .post('/api/llm/generate')
       .send({ pageContext: null, chatHistory: [] });
 
     expect(res.status).toBe(400);

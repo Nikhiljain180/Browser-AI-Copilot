@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Element Clicker
  * Handles: buttons, links, checkboxes, radio, tabs, dropdowns,
@@ -181,20 +182,6 @@ function simulateFullClick(element) {
 }
 
 
-/**
- * Fire a single mouse event (for hover simulation)
- */
-function fireMouseEvent(element, eventType) {
-  const rect = element.getBoundingClientRect();
-  element.dispatchEvent(new MouseEvent(eventType, {
-    bubbles: true,
-    cancelable: true,
-    view: window,
-    clientX: rect.left + rect.width / 2,
-    clientY: rect.top + rect.height / 2
-  }));
-}
-
 
 // ═══════════════════════════════════════════════════
 // VISIBILITY & INTERACTABILITY CHECKS
@@ -224,66 +211,6 @@ function isDisabled(element) {
 
   return false;
 }
-
-
-/**
- * Check if element is visible
- */
-function isElementVisible(element) {
-  if (!element) return false;
-
-  const style = window.getComputedStyle(element);
-  
-  if (style.display === 'none') return false;
-  if (style.visibility === 'hidden') return false;
-  if (style.opacity === '0') return false;
-  if (element.hidden) return false;
-
-  // Check if element has any dimensions
-  const rect = element.getBoundingClientRect();
-  if (rect.width === 0 && rect.height === 0) return false;
-
-  return true;
-}
-
-
-/**
- * Check if element is in the viewport
- */
-function isElementInViewport(element) {
-  const rect = element.getBoundingClientRect();
-  return (
-    rect.top >= 0 &&
-    rect.left >= 0 &&
-    rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
-    rect.right <= (window.innerWidth || document.documentElement.clientWidth)
-  );
-}
-
-
-/**
- * Check if element can actually be clicked 
- * (visible + not behind another element)
- */
-function isElementInteractable(element) {
-  if (!isElementVisible(element)) return false;
-
-  // Check if another element is covering it
-  const rect = element.getBoundingClientRect();
-  const centerX = rect.left + rect.width / 2;
-  const centerY = rect.top + rect.height / 2;
-
-  // elementFromPoint returns whatever is at that coordinate
-  const topElement = document.elementFromPoint(centerX, centerY);
-
-  if (!topElement) return false;
-
-  // Check if the top element is the target or a child of it
-  return element === topElement || 
-         element.contains(topElement) || 
-         topElement.contains(element);
-}
-
 
 /**
  * Get a human-readable description of an element

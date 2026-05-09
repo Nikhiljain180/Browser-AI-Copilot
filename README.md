@@ -17,7 +17,7 @@ A Chrome extension that acts as an intelligent agent for web automation. It uses
 |---|---|---|
 | Manifest v3 Chrome extension | ✅ Done | [`apps/extension/manifest.json`](apps/extension/manifest.json) |
 | Content scripts for DOM interaction | ✅ Done | [`apps/extension/src/content/`](apps/extension/src/content/) |
-| Node.js backend | ✅ Done — stateless LLM proxy | [`apps/backend/server.js`](apps/backend/server.js) |
+| Node.js backend | ✅ Done — stateless LLM proxy | [`apps/backend/src/server.ts`](apps/backend/src/server.ts) |
 | Vue.js sidebar/chat UI | ✅ Done | [`apps/extension/src/ui/Popup.vue`](apps/extension/src/ui/Popup.vue) |
 | Multi-turn conversation with page context | ✅ Done | Chat history kept client-side, page context re-read each turn |
 | `read_page` tool | ✅ Real | Accessibility-tree snapshot of live DOM |
@@ -29,7 +29,7 @@ A Chrome extension that acts as an intelligent agent for web automation. It uses
 | Separation of chat / agent / browser layers | ✅ Done | Vue UI ↔ service worker (ReAct loop, modular under `src/background/`) ↔ content script |
 | Human-in-the-loop on destructive actions | ✅ Done | `click_element` submit/delete and similar are gated; risk level + description shown in modal |
 | Multi-step task (read → think → act → re-read) | ✅ Done | ReAct loop in [`src/background/agent/`](apps/extension/src/background/agent/) |
-| Single-retry on tool failure | ✅ Done | [`tool-executor.js`](apps/extension/src/background/tools/tool-executor.js) |
+| Single-retry on tool failure | ✅ Done | [`tool-executor.ts`](apps/extension/src/background/tools/tool-executor.ts) |
 | Unit / integration / E2E tests | ✅ Done | Vitest + Playwright |
 
 ## Architecture
@@ -184,7 +184,7 @@ The agent exposes six tools to the LLM. All DOM interactions are real. The table
 
 The LLM composes the reply text and passes it as `action_input.draft`. The content-script tool inserts that string into the target field and dispatches the framework events. This is the path the agent takes on every well-formed call.
 
-If — and only if — the LLM omits `draft`, the tool falls back to a tone-aware scaffold built by [`buildFallbackDraftReply`](apps/extension/src/content/content-script.js#L668). The fallback is intentionally bounded:
+If — and only if — the LLM omits `draft`, the tool falls back to a tone-aware scaffold built by [`buildFallbackDraftReply`](apps/extension/src/content/content-script.ts#L668). The fallback is intentionally bounded:
 
 - It echoes only the `context` string the agent already supplied (truncated to 280 chars, whitespace-collapsed).
 - It picks an opener from `{casual, formal, professional}`.
@@ -257,9 +257,9 @@ Covered in the Tool Design section above: LLM-authored by default, with a determ
 
 ### Content-script architecture
 
-The content layer is split into focused modules loaded in manifest order: `core/` (sanitizer, registry, selector, utils, token-budget), `observers/navigation.js`, `tools/` (one file per tool), and a thin `content-script.js` entry point (~54 lines) that only wires the message listener. This avoids cross-file ordering bugs at `document_start` while keeping each concern independently readable and testable.
+The content layer is split into focused modules loaded in manifest order: `core/` (sanitizer, registry, selector, utils, token-budget), `observers/navigation.ts`, `tools/` (one file per tool), and a thin `content-script.ts` entry point (~54 lines) that only wires the message listener. This avoids cross-file ordering bugs at `document_start` while keeping each concern independently readable and testable.
 
-### Backend `server.js`
+### Backend `server.ts`
 
 Single-file Express server (~625 lines) carrying routes, prompts, and provider adapters. Functional and tested, but a production version would split into `routes/`, `services/providers/`, `services/prompts/`. Deferred for the same reason.
 

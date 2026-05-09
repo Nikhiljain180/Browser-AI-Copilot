@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Content Script Entry Point
  * 

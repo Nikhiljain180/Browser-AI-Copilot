@@ -80,7 +80,7 @@ CopilotSw.executeToolWithApproval = async function executeToolWithApproval(toolN
   delete CopilotSw.pendingApprovals[approvalId];
 
   if (!approved) {
-    return { error: 'User cancelled the action.' };
+    return { error: 'User cancelled the action.', errorCategory: 'approval', errorCode: CopilotSw.ErrorCode.APPROVAL_REJECTED };
   }
 
   return CopilotSw.executeTool(toolName, toolInput, tabId);
@@ -91,7 +91,7 @@ CopilotSw.executeTool = async function executeTool(toolName, toolInput, tabId) {
 
   for (let attempt = 1; attempt <= MAX_TOOL_ATTEMPTS; attempt += 1) {
     if (CopilotSw.agentState?.isRunning === false) {
-      return { error: 'Agent stopped by user.' };
+      return { error: 'Agent stopped by user.', errorCategory: 'unknown', errorCode: CopilotSw.ErrorCode.AGENT_STOPPED_BY_USER };
     }
 
     try {
@@ -105,9 +105,16 @@ CopilotSw.executeTool = async function executeTool(toolName, toolInput, tabId) {
         return result;
       }
 
-      lastError = new Error(result?.error || 'Tool returned an unknown error.');
-    } catch (error) {
-      lastError = error;
+      const errorMessage = String(result?.error) || 'Tool returned an unknown error.';
+      const errorCategory = result?.errorCategory || 'action';
+      const errorCode = result?.errorCode || CopilotSw.ErrorCode.ACTION_TOOL_FAILED;
+      lastError = new Error(errorMessage);
+      lastError.errorCategory = errorCategory;
+      lastError.errorCode = errorCode;
+    } catch (error: unknown) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      if (!lastError.errorCategory) lastError.errorCategory = 'perception';
+      if (!lastError.errorCode) lastError.errorCode = CopilotSw.ErrorCode.PERCEPTION_PAGE_READ_FAILED;
     }
 
     if (attempt < MAX_TOOL_ATTEMPTS) {
@@ -115,5 +122,9 @@ CopilotSw.executeTool = async function executeTool(toolName, toolInput, tabId) {
     }
   }
 
-  return { error: lastError?.message || 'Tool failed.' };
+  return {
+    error: lastError?.message || 'Tool failed.',
+    errorCategory: lastError?.errorCategory || 'action',
+    errorCode: lastError?.errorCode || CopilotSw.ErrorCode.ACTION_TOOL_FAILED,
+  };
 };

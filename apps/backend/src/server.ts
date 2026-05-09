@@ -5,6 +5,7 @@ import morgan from 'morgan';
 import config from './config';
 import { initializeLLM } from './providers/llmClient';
 import { errorHandler } from './middleware/errorHandler';
+import { generalLimiter, llmLimiter, formPlanLimiter } from './middleware/rateLimiter';
 
 import llmRoutes from './routes/llmRoutes';
 import formRoutes from './routes/formRoutes';
@@ -18,9 +19,12 @@ app.use(cors());
 app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 
-// Routes
-app.use('/api/llm', llmRoutes);
-app.use('/api/forms', formRoutes);
+// Apply general rate limiting to all routes
+app.use('/api', generalLimiter);
+
+// Routes with specific rate limits
+app.use('/api/llm', llmLimiter, llmRoutes);
+app.use('/api/forms', formPlanLimiter, formRoutes);
 app.use('/api/health', healthRoutes);
 app.use('/api/config', configRoutes);
 

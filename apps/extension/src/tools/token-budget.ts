@@ -4,6 +4,8 @@
  */
 
 class TokenBudgetManager {
+  maxTokens: number;
+
   constructor(maxTokens = 3000) {
     this.maxTokens = maxTokens;
   }

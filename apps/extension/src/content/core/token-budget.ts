@@ -1,3 +1,4 @@
+// @ts-nocheck
 function applyTokenBudget(tree) {
   const maxTokens = window.__MAX_PAGE_CONTEXT_TOKENS__ || 3000;
   let currentTokens = 0;

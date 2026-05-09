@@ -6,7 +6,7 @@
 1. State the design principle
 2. Explain what this codebase does
 3. Admit the trade-off
-4. Describe the next production improvement
+4aft. Describe the next production improvement
 
 ---
 
@@ -204,7 +204,7 @@ The background layer is the correct trust boundary, but it also means approval U
 
 ### Q20. Why is chat history not shown with tool messages in the UI?
 
-Tool messages are useful for machine context but often noisy for end users. The UI intentionally filters them out in `useChat.js`, while still keeping them in stored history so the agent has access to execution results. That gives a cleaner conversational experience without losing reasoning context.
+Tool messages are useful for machine context but often noisy for end users. The UI intentionally filters them out in `useChat.ts`, while still keeping them in stored history so the agent has access to execution results. That gives a cleaner conversational experience without losing reasoning context.
 
 **Key points:** human-friendly UI, machine-readable hidden state, context retained.
 
@@ -326,7 +326,7 @@ I would prioritize native tool-calling plus streaming. Native tool calling would
 
 ### Q2. How does the content script know which tool to execute?
 
-`content-script.js` contains a `TOOL_REGISTRY` object that maps tool names to descriptions, parameter metadata, and execute handlers. When the background sends `executeTool`, the content script validates required parameters and dispatches to the matching function.
+`content-script.ts` contains a `TOOL_REGISTRY` object that maps tool names to descriptions, parameter metadata, and execute handlers. When the background sends `executeTool`, the content script validates required parameters and dispatches to the matching function.
 
 **Key points:** registry-driven dispatch, validation before execution, narrow tool surface.
 
@@ -346,7 +346,7 @@ The content script explicitly checks whether `TOOL_REGISTRY[toolName]` exists. I
 
 ### Q4. How is `read_page` implemented?
 
-`read_page` is implemented by `extractAccessibilityTree()` in `read_page.js`. It waits briefly for dynamic rendering, clears the prior element registry, builds a structured snapshot of metadata, state, sections, interactive elements, tables, lists, and text, then applies a token budget before returning the result.
+`read_page` is implemented by `extractAccessibilityTree()` in `read_page.ts`. It waits briefly for dynamic rendering, clears the prior element registry, builds a structured snapshot of metadata, state, sections, interactive elements, tables, lists, and text, then applies a token budget before returning the result.
 
 **Key points:** semantic snapshot, registry reset, token budget.
 
@@ -446,7 +446,7 @@ It is a provider-neutral simplification. Instead of modeling tools as a separate
 
 ### Q14. How does the app recover when the UI opens after the agent already started?
 
-The UI calls `syncHistory()` in `useChat.js`, reading from `chrome.storage.local` and then asking the service worker for current history. If the agent is still marked as running, the UI sets a live phase message so the user can understand that work is in progress or resuming.
+The UI calls `syncHistory()` in `useChat.ts`, reading from `chrome.storage.local` and then asking the service worker for current history. If the agent is still marked as running, the UI sets a live phase message so the user can understand that work is in progress or resuming.
 
 **Key points:** storage hydration, runtime sync, resumed status.
 

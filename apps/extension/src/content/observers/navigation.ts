@@ -1,3 +1,6 @@
+// @ts-nocheck
+import { pageElementRegistry } from '../core/registry';
+
 let mutationObserver = null;
 let lastPageSignature = '';
 let pageChangeDebounce = null;

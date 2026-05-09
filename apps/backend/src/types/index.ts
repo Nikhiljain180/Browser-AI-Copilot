@@ -76,3 +76,25 @@ export type ErrorRequestHandler = (
   res: Response,
   next: NextFunction
 ) => void;
+
+export interface ToolCall {
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    arguments: Record<string, unknown>;
+  };
+}
+
+export interface LLMProviderResponse {
+  content: string | null;
+  toolCalls?: ToolCall[];
+}
+
+export interface ErrorResponse {
+  error: string;
+  code?: string;
+  category?: string;
+  retryable?: boolean;
+  timestamp?: number;
+}

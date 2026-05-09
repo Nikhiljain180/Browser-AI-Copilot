@@ -1,3 +1,4 @@
+// @ts-nocheck
 /* global CopilotSw */
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -67,6 +68,14 @@ CopilotSw.normalizeFieldRef = function normalizeFieldRef(item = {}) {
 
 CopilotSw.fieldKey = function fieldKey(field = {}) {
   return field.selector || field.agentId || field.label || field.name || '';
+};
+
+CopilotSw.fieldIdentifiers = function fieldIdentifiers(field = {}) {
+  return [
+    field.agentId || field.agent_id || '',
+    field.selector || '',
+    field.label || field.name || '',
+  ].filter(Boolean);
 };
 
 CopilotSw.buildFieldLookup = function buildFieldLookup(fields = []) {

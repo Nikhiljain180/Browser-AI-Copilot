@@ -226,10 +226,21 @@ async function runAgentLoop(goal, tabId) {
     if (!CopilotSw.agentState.isRunning) break;
 
     // ── Cancelled by user ──
-    if (toolResult?.error && toolResult.error.includes('cancel')) {
+    if (toolResult?.errorCategory === 'approval' || (toolResult?.error && toolResult.error.includes('cancel'))) {
       CopilotSw.agentState.chatHistory.push({
         role: 'assistant',
         content: 'Action cancelled. Workflow stopped.',
+        timestamp: Date.now(),
+      });
+      continueLoop = false;
+      break;
+    }
+
+    // ── Permission / non-retryable errors ──
+    if (toolResult?.errorCategory === 'permission') {
+      CopilotSw.agentState.chatHistory.push({
+        role: 'assistant',
+        content: `Cannot proceed: ${toolResult.error}`,
         timestamp: Date.now(),
       });
       continueLoop = false;
@@ -282,7 +293,8 @@ async function runAgentLoop(goal, tabId) {
 // PUBLIC API
 // ─────────────────────────────────────────────────────────────────────────────
 
-CopilotSw.clearAgentSession = async function clearAgentSession() {
+CopilotSw.clearAgentSession = async function clearAgentSession(url) {
+  if (url) CopilotSw.agentState.url = url;
   CopilotSw.agentState.chatHistory = [];
   CopilotSw.agentState.currentGoal = null;
   CopilotSw.agentState.pageContext = null;
@@ -319,17 +331,33 @@ CopilotSw.clearAgentSession = async function clearAgentSession() {
 
 CopilotSw.handleStartAgent = async function handleStartAgent(goal) {
   try {
-    await CopilotSw.agentState.load();
+    const tab = await CopilotSw.getUsableTab();
+    const nextUrl = tab.url || null;
+    const prevUrl = CopilotSw.agentState.url || null;
+
+    await CopilotSw.agentState.load(nextUrl);
     ensureAgentStateShape();
 
     if (CopilotSw.agentState.isRunning) {
-      throw new Error('Agent is already running');
+      throw new CopilotSw.AppError('Agent is already running', CopilotSw.ErrorCode.AGENT_ALREADY_RUNNING, false);
     }
 
-    // Clear any stale form session from a previous page or workflow.
-    // The form workflow re-detects forms fresh from the new readPage result,
-    // so carrying session state across agent runs causes cross-page bleed.
-    CopilotSw.clearFormSession();
+    // Preserve multi-turn form sessions on the same URL so follow-up answers can
+    // be consumed reliably. Only clear when the page changed (cross-page bleed).
+    //
+    // Note: AgentState is persisted per-URL, but handleStartAgent() runs per user
+    // message. Unconditionally clearing here breaks follow-up continuity.
+    const restrictedPrefixes = ['chrome://', 'chrome-extension://', 'edge://', 'about:'];
+    const isRestrictedUrl = (url) => !!url && restrictedPrefixes.some(prefix => url.startsWith(prefix));
+
+    const shouldClearFormSession =
+      !nextUrl ||
+      isRestrictedUrl(nextUrl) ||
+      (prevUrl && nextUrl !== prevUrl);
+
+    if (shouldClearFormSession) {
+      CopilotSw.clearFormSession();
+    }
 
     // ── Initialize state ──
     CopilotSw.agentState.isRunning = true;
@@ -339,8 +367,6 @@ CopilotSw.handleStartAgent = async function handleStartAgent(goal) {
 
       // ── Read current page ──
     CopilotSw.updateAgentStatus('reading', 'Collecting the current page context before starting.', true);
-
-    const tab = await CopilotSw.getUsableTab();
 
     // Ensure content scripts are injected on this tab
     await CopilotSw.ensureContentScriptInjected(tab.id);
@@ -384,10 +410,18 @@ CopilotSw.handleStartAgent = async function handleStartAgent(goal) {
       success: true,
       chatHistory: CopilotSw.agentState.chatHistory,
     };
-  } catch (error) {
+  } catch (error: unknown) {
     CopilotSw.agentState.isRunning = false;
     await CopilotSw.agentState.save();
-    CopilotSw.updateAgentStatus('idle', error.message || 'The agent stopped unexpectedly.', false);
-    throw error;
+    const normalized = CopilotSw.normalizeError(error);
+    CopilotSw.agentState.chatHistory.push({
+      role: 'assistant',
+      content: `Error [${normalized.category}]: ${normalized.message}`,
+      errorCode: normalized.code,
+      errorCategory: normalized.category,
+      timestamp: Date.now(),
+    });
+    CopilotSw.updateAgentStatus('idle', normalized.message, false);
+    throw normalized;
   }
 };
