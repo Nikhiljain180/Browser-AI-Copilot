@@ -27,7 +27,7 @@ importScripts(
   './agent/agent-runner.js',
 );
 
-function handleStopAgent() {
+async function handleStopAgent() {
   CopilotSw.agentState.isRunning = false;
 
   if (CopilotSw.activeLLMController) {
@@ -35,15 +35,16 @@ function handleStopAgent() {
     CopilotSw.activeLLMController = null;
   }
 
-  Object.keys(CopilotSw.approvalPromises || {}).forEach((approvalId) => {
+  const approvalIds = Object.keys(CopilotSw.approvalPromises || {});
+  approvalIds.forEach((approvalId) => {
     CopilotSw.approvalPromises[approvalId](false);
     delete CopilotSw.approvalPromises[approvalId];
     delete CopilotSw.pendingApprovals[approvalId];
   });
 
-  CopilotSw.agentState.save();
+  await CopilotSw.agentState.save();
   CopilotSw.updateAgentStatus('stopped', 'Agent run stopped.', false);
-  return Promise.resolve({ success: true });
+  return { success: true };
 }
 
 function handleGetChatHistory() {
@@ -55,6 +56,13 @@ function handleGetChatHistory() {
     currentGoal: CopilotSw.agentState.currentGoal,
   }));
 }
+
+chrome.runtime.onSuspend.addListener(() => {
+  if (CopilotSw.agentState?.isRunning) {
+    CopilotSw.agentState.isRunning = false;
+    CopilotSw.agentState.save();
+  }
+});
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   const handlers = {

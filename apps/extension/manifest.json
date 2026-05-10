@@ -43,5 +43,8 @@
     "32": "public/icon32.png",
     "38": "public/icon38.png"
   },
-  "host_permissions": ["<all_urls>"]
+  "host_permissions": ["<all_urls>"],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' http://localhost:3000"
+  }
 }

@@ -7,10 +7,10 @@ const request = require('supertest');
 const app = require('../../apps/backend/server');
 
 describe('Backend LLM Proxy', () => {
-  describe('POST /api/llm/stream', () => {
+  describe('POST /api/llm/chat', () => {
     it('should handle valid LLM request', async () => {
       const response = await request(app)
-        .post('/api/llm/stream')
+        .post('/api/llm/chat')
         .send({
           goal: 'Summarize this page',
           pageContext: { title: 'Test Page', textContent: 'Test content' },
@@ -24,7 +24,7 @@ describe('Backend LLM Proxy', () => {
     });
 
     it('should reject missing goal parameter', async () => {
-      const response = await request(app).post('/api/llm/stream').send({
+      const response = await request(app).post('/api/llm/chat').send({
         pageContext: {},
         chatHistory: [],
       });
@@ -36,7 +36,7 @@ describe('Backend LLM Proxy', () => {
     it('should handle LLM timeout', async () => {
       // This would require mocking the LLM timeout
       // For now, just test that endpoint exists
-      const response = await request(app).post('/api/llm/stream').send({
+      const response = await request(app).post('/api/llm/chat').send({
         goal: 'Test goal',
         pageContext: {},
         chatHistory: [],
@@ -46,7 +46,7 @@ describe('Backend LLM Proxy', () => {
     });
 
     it('should return proper response schema', async () => {
-      const response = await request(app).post('/api/llm/stream').send({
+      const response = await request(app).post('/api/llm/chat').send({
         goal: 'Test',
         pageContext: {},
         chatHistory: [],
@@ -107,7 +107,7 @@ describe('Backend LLM Proxy', () => {
 
     it('should handle invalid JSON payload', async () => {
       const response = await request(app)
-        .post('/api/llm/stream')
+        .post('/api/llm/chat')
         .set('Content-Type', 'application/json')
         .send('invalid json');
 
@@ -119,7 +119,7 @@ describe('Backend LLM Proxy', () => {
     it('should support streaming responses', async () => {
       // Note: This is a simplified test
       // Real streaming would use SSE or websockets
-      const response = await request(app).post('/api/llm/stream').send({
+      const response = await request(app).post('/api/llm/chat').send({
         goal: 'Test',
         pageContext: {},
         chatHistory: [],

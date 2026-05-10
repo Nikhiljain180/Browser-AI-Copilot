@@ -6,7 +6,7 @@ export function useHealth() {
 
   async function checkBackendHealth() {
     try {
-      const backendURL = 'http://127.0.0.1:3000/api/health';
+      const backendURL = 'http://localhost:3000/api/health';
       const response = await fetch(backendURL, {
         method: 'GET',
       });

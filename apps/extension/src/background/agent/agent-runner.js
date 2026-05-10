@@ -186,83 +186,93 @@ async function runAgentLoop(goal, tabId) {
     CopilotSw.agentState.isRunning &&
     CopilotSw.agentState.iterationCount < CopilotSw.CONFIG.MAX_REACT_ITERATIONS
   ) {
-    CopilotSw.agentState.iterationCount++;
-    CopilotSw.updateAgentStatus('thinking', 'Reasoning about the next step.', true);
+    try {
+      CopilotSw.agentState.iterationCount++;
+      CopilotSw.updateAgentStatus('thinking', 'Reasoning about the next step.', true);
 
-    const llmResponse = await CopilotSw.callLLM(
-      goal,
-      CopilotSw.agentState.pageContext,
-      CopilotSw.agentState.chatHistory,
-    );
+      const llmResponse = await CopilotSw.callLLM(
+        goal,
+        CopilotSw.agentState.pageContext,
+        CopilotSw.agentState.chatHistory,
+      );
 
-    if (!CopilotSw.agentState.isRunning) break;
+      if (!CopilotSw.agentState.isRunning) break;
 
-    CopilotSw.broadcastUI({
-      action: 'updateReasoning',
-      thought: llmResponse.thought,
-      actionName: llmResponse.action,
-      actionInput: llmResponse.action_input,
-    });
-
-    // ── Final Answer ──
-    if (llmResponse.action === 'final_answer') {
-      CopilotSw.updateAgentStatus('finalizing', 'Wrapping up the final answer.', true);
-
-      CopilotSw.agentState.chatHistory.push({
-        role: 'assistant',
-        content: llmResponse.answer,
+      CopilotSw.broadcastUI({
+        action: 'updateReasoning',
         thought: llmResponse.thought,
-        toolsUsed: collectRecentTools(CopilotSw.agentState.chatHistory),
+        actionName: llmResponse.action,
+        actionInput: llmResponse.action_input,
+      });
+
+      // ── Final Answer ──
+      if (llmResponse.action === 'final_answer') {
+        CopilotSw.updateAgentStatus('finalizing', 'Wrapping up the final answer.', true);
+
+        CopilotSw.agentState.chatHistory.push({
+          role: 'assistant',
+          content: llmResponse.answer,
+          thought: llmResponse.thought,
+          toolsUsed: collectRecentTools(CopilotSw.agentState.chatHistory),
+          timestamp: Date.now(),
+        });
+
+        continueLoop = false;
+        break;
+      }
+
+      // ── Execute Tool ──
+      CopilotSw.updateAgentStatus('acting', `Running tool: ${llmResponse.action}.`, true);
+
+      const toolResult = await CopilotSw.executeToolWithApproval(
+        llmResponse.action,
+        llmResponse.action_input,
+        tabId,
+      );
+
+      if (!CopilotSw.agentState.isRunning) break;
+
+      // ── Cancelled by user ──
+      if (toolResult?.error && toolResult.error.includes('cancel')) {
+        CopilotSw.agentState.chatHistory.push({
+          role: 'assistant',
+          content: 'Action cancelled. Workflow stopped.',
+          timestamp: Date.now(),
+        });
+        continueLoop = false;
+        break;
+      }
+
+      // ── Record tool result ──
+      CopilotSw.agentState.chatHistory.push({
+        role: 'tool',
+        toolName: llmResponse.action,
+        content: toolResult,
         timestamp: Date.now(),
       });
 
-      continueLoop = false;
-      break;
-    }
+      // ── Refresh page context ──
+      CopilotSw.agentState.pageContext = await CopilotSw.sendMessageToTab(tabId, {
+        action: 'readPage',
+        focusArea: null,
+      }).catch(() => CopilotSw.agentState.pageContext);
 
-    // ── Execute Tool ──
-    CopilotSw.updateAgentStatus('acting', `Running tool: ${llmResponse.action}.`, true);
+      await CopilotSw.agentState.save();
 
-    const toolResult = await CopilotSw.executeToolWithApproval(
-      llmResponse.action,
-      llmResponse.action_input,
-      tabId,
-    );
-
-    if (!CopilotSw.agentState.isRunning) break;
-
-    // ── Cancelled by user ──
-    if (toolResult?.error && toolResult.error.includes('cancel')) {
+      CopilotSw.broadcastUI({
+        action: 'updateProgress',
+        iteration: CopilotSw.agentState.iterationCount,
+        maxIterations: CopilotSw.CONFIG.MAX_REACT_ITERATIONS,
+      });
+    } catch (error) {
       CopilotSw.agentState.chatHistory.push({
         role: 'assistant',
-        content: 'Action cancelled. Workflow stopped.',
+        content: `Error during iteration: ${error.message}`,
         timestamp: Date.now(),
       });
-      continueLoop = false;
+      console.error('[Agent] Loop iteration error:', error);
       break;
     }
-
-    // ── Record tool result ──
-    CopilotSw.agentState.chatHistory.push({
-      role: 'tool',
-      toolName: llmResponse.action,
-      content: toolResult,
-      timestamp: Date.now(),
-    });
-
-    // ── Refresh page context ──
-    CopilotSw.agentState.pageContext = await CopilotSw.sendMessageToTab(tabId, {
-      action: 'readPage',
-      focusArea: null,
-    }).catch(() => CopilotSw.agentState.pageContext);
-
-    await CopilotSw.agentState.save();
-
-    CopilotSw.broadcastUI({
-      action: 'updateProgress',
-      iteration: CopilotSw.agentState.iterationCount,
-      maxIterations: CopilotSw.CONFIG.MAX_REACT_ITERATIONS,
-    });
   }
 
   // ── Max iterations reached — fallback ──
@@ -306,7 +316,8 @@ CopilotSw.clearAgentSession = async function clearAgentSession() {
     CopilotSw.activeLLMController = null;
   }
 
-  Object.keys(CopilotSw.approvalPromises || {}).forEach((approvalId) => {
+  const approvalIds = Object.keys(CopilotSw.approvalPromises || {});
+  approvalIds.forEach((approvalId) => {
     CopilotSw.approvalPromises[approvalId](false);
     delete CopilotSw.approvalPromises[approvalId];
     delete CopilotSw.pendingApprovals[approvalId];

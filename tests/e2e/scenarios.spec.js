@@ -143,7 +143,7 @@ test.describe('Browser AI Copilot E2E Tests', () => {
 
 test.describe('Backend Proxy Validation', () => {
   test('should return valid LLM response schema', async ({ request }) => {
-    const response = await request.post('http://localhost:3000/api/llm/stream', {
+    const response = await request.post('http://localhost:3000/api/llm/chat', {
       data: {
         goal: 'Test goal',
         pageContext: { title: 'Test', textContent: 'Test content' },
@@ -162,7 +162,7 @@ test.describe('Backend Proxy Validation', () => {
   });
 
   test('should handle invalid requests gracefully', async ({ request }) => {
-    const response = await request.post('http://localhost:3000/api/llm/stream', {
+    const response = await request.post('http://localhost:3000/api/llm/chat', {
       data: {},
     });
 

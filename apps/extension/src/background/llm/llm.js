@@ -312,7 +312,7 @@ CopilotSw.callLLM = async function callLLM(goal, pageContext, chatHistory) {
     const payload = { goal, pageContext: focusedPageContext, chatHistory: llmHistory };
 
     // ── First attempt ──
-    const data = await fetchLLM('/api/llm/stream', payload, controller.signal);
+    const data = await fetchLLM('/api/llm/chat', payload, controller.signal);
     let parsed = parseStructuredResponse(data.content);
 
     // ── Retry if parse failed ──

@@ -321,9 +321,9 @@ function setContentEditableValue(element, content, format, editorType) {
   element.innerHTML = '';
 
   if (format === 'html' && element.isContentEditable) {
-    element.innerHTML = content;
+    element.innerHTML = ContentSanitizer.sanitizeHTML(content);
   } else if (format === 'markdown') {
-    element.innerHTML = markdownToBasicHtml(content);
+    element.innerHTML = ContentSanitizer.sanitizeHTML(markdownToBasicHtml(content));
   } else {
     // Plain text — preserve line breaks
     element.innerText = content;
@@ -369,7 +369,7 @@ function setIframeContent(iframe, content, format) {
     const body = doc.body;
 
     if (format === 'html') {
-      body.innerHTML = content;
+      body.innerHTML = ContentSanitizer.sanitizeHTML(content);
     } else {
       body.innerText = content;
     }
@@ -591,74 +591,4 @@ function extractReplyContext(replyFieldSelector) {
   if (patterns.dates) context.datesInThread = patterns.dates;
 
   return context;
-}
-
-// ═══════════════════════════════════════════════════
-// UTILITY FUNCTIONS
-// ═══════════════════════════════════════════════════
-
-/**
- * Place cursor at the end of a field
- */
-function placeCursorAtEnd(element, fieldInfo) {
-  switch (fieldInfo.type) {
-    case 'textarea':
-    case 'input':
-      const len = element.value.length;
-      element.setSelectionRange(len, len);
-      break;
-
-    case 'contenteditable':
-      const range = document.createRange();
-      const selection = window.getSelection();
-      range.selectNodeContents(element);
-      range.collapse(false); // collapse to end
-      selection.removeAllRanges();
-      selection.addRange(range);
-      break;
-  }
-}
-
-/**
- * Truncate text to limit with a warning
- */
-function truncateWithWarning(text, maxLength) {
-  if (text.length <= maxLength) return text;
-
-  // Try to truncate at a word boundary
-  const truncated = text.substring(0, maxLength);
-  const lastSpace = truncated.lastIndexOf(' ');
-
-  if (lastSpace > maxLength * 0.8) {
-    return truncated.substring(0, lastSpace);
-  }
-
-  return truncated;
-}
-
-/**
- * Basic markdown to HTML converter (for rich text editors)
- */
-function markdownToBasicHtml(markdown) {
-  return (
-    markdown
-      // Headers
-      .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-      .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-      .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-      // Bold
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      // Italic
-      .replace(/\*(.+?)\*/g, '<em>$1</em>')
-      // Links
-      .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2">$1</a>')
-      // Lists
-      .replace(/^- (.+)$/gm, '<li>$1</li>')
-      .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
-      // Line breaks
-      .replace(/\n\n/g, '</p><p>')
-      .replace(/\n/g, '<br>')
-      // Wrap in paragraph
-      .replace(/^(.+)$/, '<p>$1</p>')
-  );
 }

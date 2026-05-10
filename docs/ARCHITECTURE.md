@@ -197,7 +197,7 @@ chrome.runtime.sendMessage (from content script)
 HTTP fetch to http://localhost:3000
 ```
 
-- `POST /api/llm/stream`, `POST /api/llm/retry` (ReAct agent loop)
+- `POST /api/llm/chat`, `POST /api/llm/retry` (ReAct agent loop)
 - `POST /api/forms/plan` (form fill planning)
 
 ---
@@ -367,7 +367,7 @@ This repo uses the official Chrome `side_panel` entry rather than injecting a fl
 ### `apps/extension/src/background/llm/llm.js`
 
 - `buildFocusedPageContext()` — trims context based on query type
-- `callLLM()` — POSTs to backend `/api/llm/stream` and `/api/llm/retry`
+- `callLLM()` — POSTs to backend `/api/llm/chat` and `/api/llm/retry`
 - `parseStructuredResponse()` — extracts JSON from potentially messy LLM output
 
 ### `apps/extension/src/background/agent/agent-runner.js`
@@ -518,7 +518,7 @@ This repo uses the official Chrome `side_panel` entry rather than injecting a fl
 
 ### `apps/backend/src/routes/llmRoutes.ts`
 
-- `POST /api/llm/stream` — primary LLM call
+- `POST /api/llm/chat` — primary LLM call
 - `POST /api/llm/retry` — stricter "VALID JSON only" retry
 
 ### `apps/backend/src/routes/formRoutes.ts`

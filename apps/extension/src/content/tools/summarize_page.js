@@ -514,30 +514,3 @@ function buildReadableSummary(summary) {
 
   return parts.join('\n');
 }
-
-// ═══════════════════════════════════════════════════
-// UTILITY (reuse from other functions)
-// ═══════════════════════════════════════════════════
-
-function getMetaContent(name) {
-  const meta = document.querySelector(`meta[name="${name}"], meta[property="og:${name}"]`);
-  return meta?.content || '';
-}
-
-function getSectionTitle(element) {
-  if (!element) return '';
-  const ariaLabel = element.getAttribute('aria-label');
-  if (ariaLabel) return ariaLabel.trim();
-
-  const heading = element.querySelector(
-    ':scope > h1, :scope > h2, :scope > h3, :scope > .panel-title, :scope > .card-header h2',
-  );
-  if (heading) return sanitizeText(heading.innerText).substring(0, 80);
-
-  const prev = element.previousElementSibling;
-  if (prev && /^H[1-6]$/.test(prev.tagName)) {
-    return sanitizeText(prev.innerText).substring(0, 80);
-  }
-
-  return '';
-}
