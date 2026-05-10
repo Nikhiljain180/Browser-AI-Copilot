@@ -82,6 +82,22 @@ html.light-mode .composer-input::placeholder {
   color: rgba(71, 85, 105, 0.7);
 }
 
+html.light-mode .message-row.user .avatar {
+  background: linear-gradient(135deg, rgba(100, 116, 139, 0.20) 0%, rgba(148, 163, 184, 0.12) 100%);
+  color: rgba(51, 65, 85, 0.85);
+}
+
+html.light-mode .activity-icon {
+  background: rgba(100, 116, 139, 0.12);
+  color: rgba(51, 65, 85, 0.8);
+}
+
+html.light-mode .activity-status.done {
+  color: rgba(71, 85, 105, 0.85);
+  background: rgba(100, 116, 139, 0.10);
+  border-color: rgba(100, 116, 139, 0.16);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -694,9 +710,19 @@ textarea {
   border-bottom: 1px solid rgba(148, 163, 184, 0.18);
 }
 
+.modal-header .eyebrow {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6366f1;
+}
+
 .modal-header h2 {
   margin: 0;
   font-size: 22px;
+  color: #0f172a;
 }
 
 .modal-body {

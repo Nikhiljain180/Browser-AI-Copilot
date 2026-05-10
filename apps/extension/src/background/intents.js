@@ -85,7 +85,6 @@ CopilotSw.isFormValueFollowupGoal = function isFormValueFollowupGoal(goal) {
     normalized.startsWith('with ') ||
     normalized.includes(':') ||
     /"([^"]+)"/.test(normalized) ||
-    /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(normalized) ||
-    (/^[a-z\s]+$/i.test(normalized) && normalized.length <= 40)
+    /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(normalized)
   );
 };

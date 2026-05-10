@@ -20,11 +20,22 @@ export function useFormatters() {
     return escapeHtml(value).replace(/`/g, '&#96;');
   }
 
+  function isSafeUrl(url) {
+    const allowedProtocols = ['http:', 'https:', 'mailto:'];
+    try {
+      const parsed = new URL(url, window.location.origin);
+      return allowedProtocols.includes(parsed.protocol) || parsed.protocol === '';
+    } catch {
+      return false;
+    }
+  }
+
   function formatRichText(content) {
     const escaped = escapeHtml(content);
 
-    // Markdown links: [label](any-url) — supports https, http, file, relative, etc.
+    // Markdown links: [label](url)
     const withMarkdownLinks = escaped.replace(/\[([^\]]+?)\]\(([^)\s]+)\)/g, (_, label, url) => {
+      if (!isSafeUrl(url)) return `[${label}](${escapeHtmlAttribute(url)})`;
       const safeUrl = escapeHtmlAttribute(url);
       return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${label}</a>`;
     });

@@ -85,10 +85,8 @@ CopilotSw.detectValidationErrors = function detectValidationErrors(pageContext) 
     : [];
 
   const errorFields = allFields.filter((field) => {
-    const className = String(field.className || '').toLowerCase();
-    return (
-      className.includes('error') || className.includes('invalid') || field.ariaInvalid === true
-    );
+    const validationMsg = String(field.validationMessage || '').toLowerCase();
+    return validationMsg.length > 0;
   });
 
   return { hasErrors: errors.length > 0 || errorFields.length > 0, count: errorFields.length };

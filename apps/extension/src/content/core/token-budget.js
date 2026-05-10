@@ -1,9 +1,5 @@
 function applyTokenBudget(tree) {
   const maxTokens = window.__MAX_PAGE_CONTEXT_TOKENS__ || 3000;
-  let currentTokens = 0;
-
-  currentTokens += estimateTokens(tree.url);
-  currentTokens += estimateTokens(tree.title);
 
   // Ensure all arrays exist (prevents "Cannot read properties of undefined" errors)
   tree.buttons = tree.buttons || [];
@@ -11,6 +7,8 @@ function applyTokenBudget(tree) {
   tree.elements = tree.elements || [];
   tree.sections = tree.sections || [];
   tree.textContent = tree.textContent || '';
+
+  const preambleTokens = estimateTokens(tree.url) + estimateTokens(tree.title);
 
   const budgets = {
     buttons: Math.floor(maxTokens * 0.1),
@@ -20,21 +18,23 @@ function applyTokenBudget(tree) {
     sections: Math.floor(maxTokens * 0.15),
   };
 
+  let buttonsTokens = 0;
   tree.buttons = tree.buttons
     .sort((a, b) => (b.visible ? 1 : -1) - (a.visible ? 1 : -1))
     .filter((btn) => {
       const tokens = estimateTokens(btn.text);
-      if (currentTokens + tokens <= budgets.buttons) {
-        currentTokens += tokens;
+      if (buttonsTokens + tokens <= budgets.buttons) {
+        buttonsTokens += tokens;
         return true;
       }
       return false;
     });
 
+  let linksTokens = 0;
   tree.links = tree.links.filter((link) => {
     const tokens = estimateTokens(link.text + link.href);
-    if (currentTokens + tokens <= budgets.links) {
-      currentTokens += tokens;
+    if (linksTokens + tokens <= budgets.links) {
+      linksTokens += tokens;
       return true;
     }
     return false;
@@ -44,30 +44,35 @@ function applyTokenBudget(tree) {
     tree._linksExceeded = true;
   }
 
+  let elementsTokens = 0;
   tree.elements = tree.elements
     .sort((a, b) => (b.visible ? 1 : -1) - (a.visible ? 1 : -1))
     .filter((el) => {
       const tokens = estimateTokens(el.text);
-      if (currentTokens + tokens <= budgets.elements) {
-        currentTokens += tokens;
+      if (elementsTokens + tokens <= budgets.elements) {
+        elementsTokens += tokens;
         return true;
       }
       return false;
     });
 
-  const textTokens = estimateTokens(tree.textContent);
-  if (textTokens > budgets.text) {
+  let textTokens = 0;
+  const _textTokens = estimateTokens(tree.textContent);
+  if (_textTokens > budgets.text) {
     const maxChars = budgets.text * 4;
     tree.textContent =
       tree.textContent.substring(0, maxChars) + '\n[... text truncated for token budget]';
     tree._textTruncated = true;
+    textTokens = budgets.text;
+  } else {
+    textTokens = _textTokens;
   }
-  currentTokens += estimateTokens(tree.textContent);
 
+  let sectionsTokens = 0;
   tree.sections = tree.sections.filter((section) => {
     const tokens = estimateTokens(section.title + section.text);
-    if (currentTokens + tokens <= budgets.sections) {
-      currentTokens += tokens;
+    if (sectionsTokens + tokens <= budgets.sections) {
+      sectionsTokens += tokens;
       return true;
     }
     return false;
@@ -77,10 +82,11 @@ function applyTokenBudget(tree) {
     tree._sectionsExceeded = true;
   }
 
+  const estimated = preambleTokens + buttonsTokens + linksTokens + elementsTokens + textTokens + sectionsTokens;
   tree._tokenInfo = {
-    estimated: currentTokens,
+    estimated,
     maxBudget: maxTokens,
-    exceeded: currentTokens > maxTokens,
+    exceeded: estimated > maxTokens,
   };
 
   return tree;

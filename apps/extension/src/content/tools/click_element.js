@@ -63,7 +63,7 @@ function clickElement(target, options = {}) {
     }
 
     // ── 4. Perform the click ──
-    return performClick(element, clickType, hoverFirst, description);
+    return Promise.resolve(performClick(element, clickType, hoverFirst, description));
   } catch (error) {
     return { error: error.message };
   }

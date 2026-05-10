@@ -500,7 +500,7 @@ function buildTemplateDraft(context, tone, mentionUser, signature) {
  * Extract conversation context around a reply field
  * Gives the AI the thread/message being replied to
  */
-function extractReplyContext(replyFieldSelector) {
+function _extractReplyContext(replyFieldSelector) {
   const field = replyFieldSelector
     ? document.querySelector(replyFieldSelector)
     : resolveReplyField({});

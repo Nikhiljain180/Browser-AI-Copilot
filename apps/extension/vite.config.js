@@ -14,6 +14,8 @@ export default defineConfig({
     environment: 'jsdom',
   },
 
+  publicDir: false,
+
   build: {
     outDir: './public/dist',
     emptyOutDir: false, // Preserve manifest.json, icons

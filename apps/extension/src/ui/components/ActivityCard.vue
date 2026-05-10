@@ -60,7 +60,12 @@ const statusClass = computed(() => (statusText.value === 'Error' ? 'error' : 'do
 const detailsText = computed(() => {
   if (!toolContent.value) return '';
   if (typeof toolContent.value === 'string') return toolContent.value;
-  return safeStringify(toolContent.value);
+  const tc = toolContent.value;
+  const parts = [];
+  if (tc.message) parts.push(tc.message);
+  if (tc.error) parts.push(tc.error);
+  if (tc._meta?.duration) parts.push(`Duration: ${tc._meta.duration}`);
+  return parts.length > 0 ? parts.join('\n') : safeStringify(tc);
 });
 </script>
 

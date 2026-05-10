@@ -1,252 +1,326 @@
-/**
- * Unit Tests for ReAct Loop
- * Vitest + Vue Test Utils
- */
-
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { useFormatters } from '../../apps/extension/src/ui/composables/useFormatters.js';
 
-describe('ReAct Loop - Agent Logic', () => {
-  let mockLLM;
-  let mockTools;
+const { formatRichText, getMessageList, formatTime } = useFormatters();
 
-  beforeEach(() => {
-    // Mock LLM responses
-    mockLLM = vi.fn().mockResolvedValue({
-      thought: 'I need to extract data from this table',
-      action: 'extract_data',
-      action_input: {
-        target: 'table.products',
-        schema: { name: 'string', price: 'number' },
-      },
-      answer: null,
+function estimateTokens(text) {
+  if (!text) return 0;
+  return Math.ceil(String(text).length / 4);
+}
+
+function applyTokenBudget(tree) {
+  const maxTokens = 3000;
+
+  tree.buttons = tree.buttons || [];
+  tree.links = tree.links || [];
+  tree.elements = tree.elements || [];
+  tree.sections = tree.sections || [];
+  tree.textContent = tree.textContent || '';
+
+  const preambleTokens = estimateTokens(tree.url) + estimateTokens(tree.title);
+
+  const budgets = {
+    buttons: Math.floor(maxTokens * 0.1),
+    links: Math.floor(maxTokens * 0.15),
+    elements: Math.floor(maxTokens * 0.2),
+    text: Math.floor(maxTokens * 0.4),
+    sections: Math.floor(maxTokens * 0.15),
+  };
+
+  let buttonsTokens = 0;
+  tree.buttons = tree.buttons
+    .sort((a, b) => (b.visible ? 1 : -1) - (a.visible ? 1 : -1))
+    .filter((btn) => {
+      const tokens = estimateTokens(btn.text);
+      if (buttonsTokens + tokens <= budgets.buttons) {
+        buttonsTokens += tokens;
+        return true;
+      }
+      return false;
     });
 
-    // Mock tools
-    mockTools = {
-      read_page: vi.fn().mockResolvedValue({ elements: [], textContent: 'sample' }),
-      click_element: vi.fn().mockResolvedValue({ success: true }),
-      extract_data: vi.fn().mockResolvedValue({ data: [{ name: 'Product', price: 100 }] }),
-    };
+  let linksTokens = 0;
+  tree.links = tree.links.filter((link) => {
+    const tokens = estimateTokens(link.text + link.href);
+    if (linksTokens + tokens <= budgets.links) {
+      linksTokens += tokens;
+      return true;
+    }
+    return false;
   });
+  if (tree.links.length > 20) {
+    tree.links = tree.links.slice(0, 20);
+    tree._linksExceeded = true;
+  }
 
-  it('should handle single-step task', async () => {
-    const goal = 'Summarize this page';
-
-    // Simulate agent loop
-    const response = await mockLLM();
-    expect(response.action).toBeDefined();
-  });
-
-  it('should handle multi-step workflow', async () => {
-    // Simulate: read page → find element → click → extract data
-    const goals = ['read_page', 'click_element', 'extract_data'];
-
-    goals.forEach((tool) => {
-      expect(mockTools[tool]).toBeDefined();
+  let elementsTokens = 0;
+  tree.elements = tree.elements
+    .sort((a, b) => (b.visible ? 1 : -1) - (a.visible ? 1 : -1))
+    .filter((el) => {
+      const tokens = estimateTokens(el.text);
+      if (elementsTokens + tokens <= budgets.elements) {
+        elementsTokens += tokens;
+        return true;
+      }
+      return false;
     });
-  });
 
-  it('should parse valid JSON responses', () => {
-    const jsonResponse = `{
-      "thought": "I think...",
-      "action": "click_element",
-      "action_input": {"selector": "#btn"},
-      "answer": null
-    }`;
+  let textTokens = 0;
+  const rawTextTokens = estimateTokens(tree.textContent);
+  if (rawTextTokens > budgets.text) {
+    const maxChars = budgets.text * 4;
+    tree.textContent =
+      tree.textContent.substring(0, maxChars) + '\n[... text truncated for token budget]';
+    tree._textTruncated = true;
+    textTokens = budgets.text;
+  } else {
+    textTokens = rawTextTokens;
+  }
 
-    const parsed = JSON.parse(jsonResponse);
-    expect(parsed.action).toBe('click_element');
-  });
-
-  it('should fallback to regex on JSON parse failure', () => {
-    const malformedResponse = `Some text before { "action": "read_page" } some text after`;
-
-    const jsonMatch = malformedResponse.match(/\{[\s\S]*\}/);
-    expect(jsonMatch).toBeTruthy();
-
-    const parsed = JSON.parse(jsonMatch[0]);
-    expect(parsed.action).toBe('read_page');
-  });
-
-  it('should respect max iteration limit', async () => {
-    const maxIterations = 10;
-    let iterations = 0;
-
-    while (iterations < maxIterations + 5) {
-      iterations++;
-      if (iterations >= maxIterations) break;
+  let sectionsTokens = 0;
+  tree.sections = tree.sections.filter((section) => {
+    const tokens = estimateTokens(section.title + section.text);
+    if (sectionsTokens + tokens <= budgets.sections) {
+      sectionsTokens += tokens;
+      return true;
     }
-
-    expect(iterations).toBe(maxIterations);
+    return false;
   });
+  if (tree.sections.length > 8) {
+    tree.sections = tree.sections.slice(0, 8);
+    tree._sectionsExceeded = true;
+  }
 
-  it('should handle tool failure and retry', async () => {
-    const failingTool = vi
-      .fn()
-      .mockRejectedValueOnce(new Error('First attempt failed'))
-      .mockResolvedValueOnce({ success: true });
+  const estimated = preambleTokens + buttonsTokens + linksTokens + elementsTokens + textTokens + sectionsTokens;
+  tree._tokenInfo = {
+    estimated,
+    maxBudget: maxTokens,
+    exceeded: estimated > maxTokens,
+  };
 
-    try {
-      await failingTool();
-    } catch (e) {
-      // Expected
+  return tree;
+}
+
+function extractFirstJsonObject(text) {
+  if (!text) return null;
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escape = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (escape) { escape = false; continue; }
+    if (ch === '\\' && inString) { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === '{') {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (ch === '}') {
+      depth--;
+      if (depth === 0 && start >= 0) {
+        return text.substring(start, i + 1);
+      }
     }
+  }
+  return null;
+}
 
-    const result = await failingTool();
-    expect(result.success).toBe(true);
-  });
-
-  it('should manage approval gate', async () => {
-    const approvalRequiredAction = {
-      toolName: 'click_element',
-      toolInput: { selector: 'button[data-action="submit"]' },
-      requiresApproval: true,
-    };
-
-    expect(approvalRequiredAction.requiresApproval).toBe(true);
-  });
-});
-
-describe('LLM Output Parsing', () => {
-  it('should parse structured responses', () => {
-    const output = `{
-      "thought": "User wants me to fill a form",
-      "action": "fill_input",
-      "action_input": {
-        "selector": "input[name='email']",
-        "value": "test@example.com"
-      },
-      "answer": null
-    }`;
-
-    const parsed = JSON.parse(output);
-    expect(parsed.action_input.value).toBe('test@example.com');
-  });
-
-  it('should handle edge cases in parsing', () => {
-    // Test with escaped quotes, newlines, etc.
-    const output = `{
-      "thought": "The button says \\"Click me!\\"",
-      "action": "final_answer",
-      "action_input": {},
-      "answer": "I clicked the button."
-    }`;
-
-    const parsed = JSON.parse(output);
-    expect(parsed.answer).toBeDefined();
-  });
-});
-
-describe('Tool Execution', () => {
-  it('should execute read_page tool', async () => {
-    const mockPageContext = {
+describe('Token Budget', () => {
+  it('should give each category its own independent budget', () => {
+    const tree = {
       url: 'https://example.com',
-      title: 'Example',
-      elements: [],
-      textContent: 'Sample content',
-    };
-
-    expect(mockPageContext.url).toBe('https://example.com');
-  });
-
-  it('should validate click_element parameters', () => {
-    const validInput = {
-      selector: '.button-class',
-      description: 'Submit form',
-    };
-
-    expect(validInput.selector).toBeTruthy();
-    expect(validInput.description).toBeTruthy();
-  });
-
-  it('should validate fill_input parameters', () => {
-    const validInput = {
-      selector: 'input#email',
-      value: 'test@example.com',
-    };
-
-    expect(validInput.value).toMatch(/@/);
-  });
-
-  it('should extract structured data', () => {
-    const mockData = [
-      { col_0: 'Product A', col_1: '100' },
-      { col_0: 'Product B', col_1: '200' },
-    ];
-
-    expect(mockData.length).toBe(2);
-    expect(mockData[0].col_0).toBe('Product A');
-  });
-});
-
-describe('Token Budget Management', () => {
-  it('should estimate tokens correctly', () => {
-    const text = 'a'.repeat(4);
-    const estimatedTokens = Math.ceil(text.length / 4); // 1 token
-    expect(estimatedTokens).toBe(1);
-  });
-
-  it('should truncate page context to fit budget', () => {
-    const context = {
-      elements: Array(100).fill({ text: 'element' }),
+      title: 'Test',
+      buttons: Array.from({ length: 50 }, (_, i) => ({ text: `Button ${i}`, visible: true })),
+      links: Array.from({ length: 50 }, (_, i) => ({ text: `Link ${i}`, href: '/page' })),
+      elements: Array.from({ length: 50 }, (_, i) => ({ text: `Element ${i}`, visible: true })),
+      sections: Array.from({ length: 20 }, (_, i) => ({ title: `Section ${i}`, text: 'content' })),
       textContent: 'x'.repeat(10000),
     };
 
-    // Simple truncation logic
-    const truncated = {
-      ...context,
-      elements: context.elements.slice(0, 20),
-      textContent: context.textContent.substring(0, 500),
+    const result = applyTokenBudget(tree);
+
+    expect(result.buttons.length).toBeGreaterThan(0);
+    expect(result.links.length).toBeGreaterThan(0);
+    expect(result.elements.length).toBeGreaterThan(0);
+    expect(result.sections.length).toBeGreaterThan(0);
+    expect(result.textContent.length).toBeLessThan(10000);
+    expect(result._tokenInfo.estimated).toBeLessThanOrEqual(3100);
+  });
+
+  it('should prioritize visible buttons over hidden ones', () => {
+    const tree = {
+      buttons: [
+        { text: 'Hidden', visible: false },
+        { text: 'Visible 1', visible: true },
+        { text: 'Visible 2', visible: true },
+      ],
+      links: [],
+      elements: [],
+      sections: [],
+      textContent: '',
     };
 
-    expect(truncated.elements.length).toBeLessThan(context.elements.length);
+    const result = applyTokenBudget(tree);
+    expect(result.buttons[0].visible).toBe(true);
   });
 
-  it('should prioritize visible elements', () => {
-    const elements = [
-      { visible: true, text: 'Visible 1' },
-      { visible: false, text: 'Hidden 1' },
-      { visible: true, text: 'Visible 2' },
-    ];
+  it('should cap links at 20 entries', () => {
+    const tree = {
+      buttons: [],
+      links: Array.from({ length: 50 }, (_, i) => ({ text: `Link ${i}`, href: `/page${i}` })),
+      elements: [],
+      sections: [],
+      textContent: '',
+    };
 
-    const visibleElements = elements.filter((e) => e.visible);
-    expect(visibleElements.length).toBe(2);
+    const result = applyTokenBudget(tree);
+    expect(result.links.length).toBeLessThanOrEqual(20);
   });
 
-  it('should create sliding window for conversation', () => {
-    const history = Array(15)
-      .fill(null)
-      .map((_, i) => ({ id: i }));
-    const windowed = history.slice(-10);
+  it('should cap sections at 8 entries', () => {
+    const tree = {
+      buttons: [],
+      links: [],
+      elements: [],
+      sections: Array.from({ length: 20 }, (_, i) => ({ title: `Section ${i}`, text: 'content' })),
+      textContent: '',
+    };
 
-    expect(windowed.length).toBe(10);
+    const result = applyTokenBudget(tree);
+    expect(result.sections.length).toBeLessThanOrEqual(8);
   });
 });
 
-describe('Error Handling', () => {
-  it('should handle network timeout', async () => {
-    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 100));
-
-    try {
-      await timeout;
-    } catch (e) {
-      expect(e.message).toBe('Timeout');
-    }
+describe('JSON Extraction (extractFirstJsonObject)', () => {
+  it('should extract JSON from clean input', () => {
+    const input = '{"thought": "test", "action": "click"}';
+    expect(extractFirstJsonObject(input)).toBe(input);
   });
 
-  it('should report tool failures clearly', () => {
-    const failure = {
-      error: 'Element not found: .nonexistent-selector',
-      toolName: 'click_element',
-    };
-
-    expect(failure.error).toContain('not found');
+  it('should extract JSON from text-wrapped input', () => {
+    const input = 'Some text before {"thought": "test", "action": "read_page"} after text';
+    const result = extractFirstJsonObject(input);
+    expect(result).toBe('{"thought": "test", "action": "read_page"}');
   });
 
-  it('should handle missing DOM elements gracefully', () => {
-    const selector = '#nonexistent';
-    const element = document.querySelector(selector);
+  it('should handle nested objects', () => {
+    const input = '{"action": "fill_input", "action_input": {"selector": "#btn", "value": "test"}}';
+    const result = extractFirstJsonObject(input);
+    expect(JSON.parse(result).action_input.selector).toBe('#btn');
+  });
 
-    expect(element).toBeNull();
+  it('should return null for input with no JSON', () => {
+    expect(extractFirstJsonObject('just text')).toBeNull();
+  });
+
+  it('should return null for empty input', () => {
+    expect(extractFirstJsonObject('')).toBeNull();
+    expect(extractFirstJsonObject(null)).toBeNull();
+    expect(extractFirstJsonObject(undefined)).toBeNull();
+  });
+
+  it('should handle strings containing curly braces', () => {
+    const input = '{"thought": "looks like {this}", "action": "final_answer"}';
+    const result = extractFirstJsonObject(input);
+    expect(JSON.parse(result).thought).toBe('looks like {this}');
+  });
+
+  it('should handle escaped quotes inside strings', () => {
+    const input = '{"thought": "said \\"hello\\"", "action": "final_answer"}';
+    const result = extractFirstJsonObject(input);
+    expect(JSON.parse(result).thought).toBe('said "hello"');
+  });
+});
+
+describe('formatRichText (XSS safety)', () => {
+  it('should escape HTML tags', () => {
+    const result = formatRichText('<script>alert(1)</script>');
+    expect(result).not.toContain('<script>');
+    expect(result).toContain('&lt;script&gt;');
+  });
+
+  it('should allow safe markdown links', () => {
+    const result = formatRichText('[Click here](https://example.com)');
+    expect(result).toContain('<a href="https://example.com"');
+  });
+
+  it('should block javascript: URLs in markdown links', () => {
+    const result = formatRichText('[Click](javascript:alert(1))');
+    expect(result).not.toContain('href="javascript:alert(1)"');
+    expect(result).toContain('[Click](');
+  });
+
+  it('should block data: URLs in markdown links', () => {
+    const result = formatRichText('[Data](data:text/html,<script>alert(1)</script>)');
+    expect(result).not.toContain('href="data:');
+  });
+
+  it('should convert bare http URLs to links', () => {
+    const result = formatRichText('Visit https://example.com/page now');
+    expect(result).toContain('<a href="https://example.com/page"');
+  });
+
+  it('should convert **bold** text', () => {
+    const result = formatRichText('This is **important**');
+    expect(result).toContain('<strong>important</strong>');
+  });
+
+  it('should convert newlines to <br>', () => {
+    const result = formatRichText('Line 1\nLine 2');
+    expect(result).toContain('<br>');
+  });
+});
+
+describe('getMessageList', () => {
+  it('should return array as-is if all strings', () => {
+    expect(getMessageList(['a', 'b', 'c'])).toEqual(['a', 'b', 'c']);
+  });
+
+  it('should extract bullet points from markdown', () => {
+    const result = getMessageList('- item 1\n- item 2\n- item 3');
+    expect(result).toEqual(['item 1', 'item 2', 'item 3']);
+  });
+
+  it('should extract numbered list items', () => {
+    const result = getMessageList('1. First\n2. Second\n3. Third');
+    expect(result).toEqual(['First', 'Second', 'Third']);
+  });
+
+  it('should return empty array for plain text', () => {
+    expect(getMessageList('Just a paragraph of text.')).toEqual([]);
+  });
+});
+
+describe('formatTime', () => {
+  it('should return "Just now" for null timestamp', () => {
+    expect(formatTime(null)).toBe('Just now');
+  });
+
+  it('should format valid timestamps', () => {
+    const result = formatTime(Date.now());
+    expect(result).toBeTruthy();
+    expect(typeof result).toBe('string');
+  });
+});
+
+describe('Error handling edge cases', () => {
+  it('should parse valid JSON from clean LLM output', () => {
+    const json = JSON.parse('{"thought": "I think...", "action": "final_answer", "answer": "Done."}');
+    expect(json.action).toBe('final_answer');
+    expect(json.answer).toBe('Done.');
+  });
+
+  it('should handle malformed JSON with retry strategy', () => {
+    const malformed = 'Some text before {"action": "read_page"} some text after';
+    const extracted = extractFirstJsonObject(malformed);
+    expect(extracted).toBeTruthy();
+    const parsed = JSON.parse(extracted);
+    expect(parsed.action).toBe('read_page');
+  });
+
+  it('should not crash on null values in extraction', () => {
+    expect(extractFirstJsonObject(null)).toBeNull();
+    expect(extractFirstJsonObject(undefined)).toBeNull();
   });
 });

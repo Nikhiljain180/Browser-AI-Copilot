@@ -21,7 +21,10 @@ export function useChat() {
     if (previous?.text === normalized) return;
 
     const entry = { id: ++liveThoughtId, text: normalized };
-    liveThoughtLines.value = [entry];
+    if (liveThoughtLines.value.length >= 5) {
+      liveThoughtLines.value.shift();
+    }
+    liveThoughtLines.value.push(entry);
   }
 
   function resetLiveThoughts() {
@@ -63,7 +66,6 @@ export function useChat() {
     chatMutationObserver.observe(scroller, {
       childList: true,
       subtree: true,
-      characterData: true,
     });
 
     if (typeof ResizeObserver !== 'undefined') {

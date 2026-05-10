@@ -8,10 +8,7 @@
         </button>
       </div>
     </div>
-  </transition>
-
-  <transition name="fade">
-    <div v-if="errorMessage" class="banner error-banner">
+    <div v-else-if="errorMessage" class="banner error-banner">
       <span>{{ errorMessage }}</span>
       <div class="banner-actions">
         <button

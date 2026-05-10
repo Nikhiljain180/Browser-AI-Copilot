@@ -344,7 +344,13 @@ function fillDateTime(element, value, inputType) {
  * RANGE (slider)
  */
 function fillRange(element, value) {
+  if (value == null) {
+    return { error: 'No range value provided' };
+  }
   const numValue = parseFloat(value);
+  if (isNaN(numValue)) {
+    return { error: `Invalid range value: "${value}"` };
+  }
   const min = parseFloat(element.min) || 0;
   const max = parseFloat(element.max) || 100;
 
@@ -363,6 +369,9 @@ function fillRange(element, value) {
  * COLOR PICKER
  */
 function fillColor(element, value) {
+  if (value == null) {
+    return { error: 'No color value provided' };
+  }
   let hex = value;
 
   // Convert color names to hex
@@ -433,15 +442,8 @@ function fillContentEditable(element, value) {
 /**
  * Set value using native setter (bypasses React/Vue/Angular)
  */
-function setNativeValue(element, value) {
-  const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), 'value');
-
-  if (descriptor && descriptor.set) {
-    descriptor.set.call(element, value);
-  } else {
-    element.value = value;
-  }
-}
+// Uses global setNativeValue() from utils.js (more robust 3-branch fallback)
+// Local duplicate removed to avoid name collision.
 
 /**
  * Fire all necessary events for framework compatibility
@@ -451,7 +453,4 @@ function fireAllEvents(element) {
   events.forEach((eventType) => {
     element.dispatchEvent(new Event(eventType, { bubbles: true }));
   });
-
-  // Also fire for React synthetic events
-  element.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
 }

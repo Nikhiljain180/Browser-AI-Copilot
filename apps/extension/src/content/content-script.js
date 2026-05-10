@@ -28,8 +28,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 async function handleMessage(request) {
-  console.log('[Copilot] Received action:', request.action, request.toolName || '');
-
   switch (request.action) {
     case 'ping':
       return {

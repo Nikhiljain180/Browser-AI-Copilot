@@ -269,7 +269,6 @@ function parseStructuredResponse(content) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function fetchLLM(endpoint, payload, signal) {
-  console.log('FULL CONTEXT SENT TO AI:', JSON.stringify(payload, null, 2));
   const response = await fetch(`${CopilotSw.CONFIG.BACKEND_URL}${endpoint}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -314,10 +313,12 @@ CopilotSw.callLLM = async function callLLM(goal, pageContext, chatHistory) {
     // ── First attempt ──
     const data = await fetchLLM('/api/llm/chat', payload, controller.signal);
     let parsed = parseStructuredResponse(data.content);
+    let lastRawContent = data.content;
 
     // ── Retry if parse failed ──
     if (!parsed) {
-      const retryData = await fetchLLM('/api/llm/retry', payload, controller.signal);
+      const retryPayload = { ...payload, previousResponse: lastRawContent };
+      const retryData = await fetchLLM('/api/llm/retry', retryPayload, controller.signal);
       parsed = parseStructuredResponse(retryData.content);
     }
 

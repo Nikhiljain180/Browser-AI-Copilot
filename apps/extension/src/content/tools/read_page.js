@@ -78,9 +78,6 @@ async function extractAccessibilityTree(focusArea = null) {
 
   // Apply token budget (prioritized)
   const result = applyTokenBudget(tree);
-  console.log('>>> Tables after budget:', result.tables?.length);
-  console.log('>>> First table rows after budget:', result.tables?.[0]?.rows?.length);
-  console.log('>>> Token info:', result._tokenInfo);
   return result;
 }
 
@@ -534,7 +531,6 @@ function extractAllForms(tree, root) {
 // ═══════════════════════════════════════════════════
 
 function extractAllTables(tree, root) {
-  console.log('>>> extractAllTables called');
   root.querySelectorAll('table').forEach((table, idx) => {
     const tableAgentId = registerElement(`table_${idx}`, table);
 
@@ -628,7 +624,6 @@ function extractAllTables(tree, root) {
     }
 
     tree.tables.push(tableData);
-    console.log('>>> tree.tables after extraction:', JSON.stringify(tree.tables, null, 2));
   });
 }
 

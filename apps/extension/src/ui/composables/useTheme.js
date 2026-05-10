@@ -1,8 +1,12 @@
-import { ref, watch, onMounted } from 'vue';
+import { ref } from 'vue';
 
-const theme = ref('dark');
+let themeSingleton = null;
 
 export function useTheme() {
+  if (!themeSingleton) {
+    themeSingleton = ref('dark');
+  }
+  const theme = themeSingleton;
   function toggleTheme() {
     theme.value = theme.value === 'dark' ? 'light' : 'dark';
     saveTheme();

@@ -411,14 +411,8 @@ function summarizeActions(root) {
 /**
  * Detect if a button appears to be a primary/CTA button
  */
-function isPrimaryButton(btn) {
-  const classes = btn.className.toLowerCase();
-  const isPrimary = /primary|cta|main|submit|action|hero/.test(classes);
-  const isLarge = btn.getBoundingClientRect().width > 150;
-  const hasGradient = window.getComputedStyle(btn).backgroundImage.includes('gradient');
-
-  return isPrimary || isLarge || hasGradient;
-}
+// Uses global isPrimaryButton() from utils.js (with try/catch safety)
+// Local duplicate removed to avoid name collision.
 
 // ═══════════════════════════════════════════════════
 // HUMAN-READABLE SUMMARY BUILDER

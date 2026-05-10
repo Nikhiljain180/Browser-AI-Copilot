@@ -8,11 +8,6 @@ export function useAgent() {
   const currentAction = ref('');
   const currentActionInput = ref(null);
 
-  const statusLabel = computed(() => {
-    if (isRunning.value) return 'Live';
-    return 'Ready';
-  });
-
   const livePhaseLabel = computed(() => {
     const phaseLabels = {
       reading: 'Reading page',
@@ -89,7 +84,6 @@ export function useAgent() {
     currentThought,
     currentAction,
     currentActionInput,
-    statusLabel,
     livePhaseLabel,
     liveStatusDetail,
     polishedStage,
