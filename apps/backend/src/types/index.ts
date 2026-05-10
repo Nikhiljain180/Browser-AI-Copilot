@@ -74,5 +74,5 @@ export type ErrorRequestHandler = (
   err: Error,
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => void;

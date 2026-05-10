@@ -13,28 +13,28 @@ A Chrome extension that acts as an intelligent agent for web automation. It uses
 
 ## Implementation Status (mapped to assignment requirements)
 
-| Requirement | Status | Where |
-|---|---|---|
-| Manifest v3 Chrome extension | ✅ Done | [`apps/extension/manifest.json`](apps/extension/manifest.json) |
-| Content scripts for DOM interaction | ✅ Done | [`apps/extension/src/content/`](apps/extension/src/content/) |
-| Node.js backend | ✅ Done — stateless LLM proxy | [`apps/backend/server.js`](apps/backend/server.js) |
-| Vue.js sidebar/chat UI | ✅ Done | [`apps/extension/src/ui/Popup.vue`](apps/extension/src/ui/Popup.vue) |
-| Multi-turn conversation with page context | ✅ Done | Chat history kept client-side, page context re-read each turn |
-| `read_page` tool | ✅ Real | Accessibility-tree snapshot of live DOM |
-| `click_element` tool | ✅ Real | Synthetic click compatible with React/Vue/Angular |
-| `fill_input` tool | ✅ Real | Native prototype setter so React-controlled inputs persist |
-| `extract_data` tool | ✅ Real | Tables / lists / role-tagged regions, sanitized text output |
-| `draft_reply` tool | ✅ LLM-authored, deterministic fallback | See "Tool Design" section |
-| `summarize_page` tool | ✅ Real | LLM summarizes trimmed main-region text |
-| Separation of chat / agent / browser layers | ✅ Done | Vue UI ↔ service worker (ReAct loop, modular under `src/background/`) ↔ content script |
-| Human-in-the-loop on destructive actions | ✅ Done | `click_element` submit/delete and similar are gated; risk level + description shown in modal |
-| Multi-step task (read → think → act → re-read) | ✅ Done | ReAct loop in [`src/background/agent/`](apps/extension/src/background/agent/) |
-| Single-retry on tool failure | ✅ Done | [`tool-executor.js`](apps/extension/src/background/tools/tool-executor.js) |
-| Unit / integration / E2E tests | ✅ Done | Vitest + Playwright |
+| Requirement                                    | Status                                  | Where                                                                                        |
+| ---------------------------------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Manifest v3 Chrome extension                   | ✅ Done                                 | [`apps/extension/manifest.json`](apps/extension/manifest.json)                               |
+| Content scripts for DOM interaction            | ✅ Done                                 | [`apps/extension/src/content/`](apps/extension/src/content/)                                 |
+| Node.js backend                                | ✅ Done — stateless LLM proxy           | [`apps/backend/server.js`](apps/backend/server.js)                                           |
+| Vue.js sidebar/chat UI                         | ✅ Done                                 | [`apps/extension/src/ui/Popup.vue`](apps/extension/src/ui/Popup.vue)                         |
+| Multi-turn conversation with page context      | ✅ Done                                 | Chat history kept client-side, page context re-read each turn                                |
+| `read_page` tool                               | ✅ Real                                 | Accessibility-tree snapshot of live DOM                                                      |
+| `click_element` tool                           | ✅ Real                                 | Synthetic click compatible with React/Vue/Angular                                            |
+| `fill_input` tool                              | ✅ Real                                 | Native prototype setter so React-controlled inputs persist                                   |
+| `extract_data` tool                            | ✅ Real                                 | Tables / lists / role-tagged regions, sanitized text output                                  |
+| `draft_reply` tool                             | ✅ LLM-authored, deterministic fallback | See "Tool Design" section                                                                    |
+| `summarize_page` tool                          | ✅ Real                                 | LLM summarizes trimmed main-region text                                                      |
+| Separation of chat / agent / browser layers    | ✅ Done                                 | Vue UI ↔ service worker (ReAct loop, modular under `src/background/`) ↔ content script       |
+| Human-in-the-loop on destructive actions       | ✅ Done                                 | `click_element` submit/delete and similar are gated; risk level + description shown in modal |
+| Multi-step task (read → think → act → re-read) | ✅ Done                                 | ReAct loop in [`src/background/agent/`](apps/extension/src/background/agent/)                |
+| Single-retry on tool failure                   | ✅ Done                                 | [`tool-executor.js`](apps/extension/src/background/tools/tool-executor.js)                   |
+| Unit / integration / E2E tests                 | ✅ Done                                 | Vitest + Playwright                                                                          |
 
 ## Architecture
 
-The system is engineered for maximum privacy and performance. It is split into a stateful Chrome Extension and a stateless Node.js backend proxy. 
+The system is engineered for maximum privacy and performance. It is split into a stateful Chrome Extension and a stateless Node.js backend proxy.
 
 **Crucially: Page context always stays client-side.** The backend only pipes requests to the LLM and streams the response back. No user data, DOM content, or chat history is stored on the backend.
 
@@ -105,7 +105,9 @@ User Request
                  ▼
            [Loop back to step 2]
 ```
+
 For action-oriented tasks, the agent follows this sequence:
+
 1. **Read Page**: Extract current accessibility tree.
 2. **Call LLM**: Reason about the goal based on page context.
 3. **Decision**: Select a tool (e.g., `click_element`, `fill_input`) or return a `final_answer`.
@@ -128,6 +130,7 @@ browser-ai-copilot/
 ## Setup Instructions
 
 ### Prerequisites
+
 - Node.js 18+
 - npm 9+
 - OpenAI or Anthropic API key
@@ -135,6 +138,7 @@ browser-ai-copilot/
 ### Installation
 
 1. Clone the repository and install dependencies:
+
 ```bash
 git clone https://github.com/yourusername/browser-ai-copilot.git
 cd browser-ai-copilot
@@ -142,9 +146,11 @@ npm run install:all
 ```
 
 2. Configure environment variables:
+
 ```bash
 cp .env.example .env
 ```
+
 Edit `.env` to include your API keys and provider preferences. Supported providers are `openai` (e.g., `gpt-4`) and `anthropic` (e.g., `claude-3-opus`).
 
 ### Build
@@ -157,12 +163,15 @@ npm run build --workspace=apps/extension
 ## Running Locally
 
 1. **Start the Backend Proxy:**
+
 ```bash
 npm run dev:backend
 ```
+
 The server will start on port 3000.
 
 2. **Load the Extension in Chrome:**
+
 - Open Chrome and navigate to `chrome://extensions/`
 - Enable "Developer mode"
 - Click "Load unpacked" and select `browser-ai-copilot/apps/extension`
@@ -171,14 +180,14 @@ The server will start on port 3000.
 
 The agent exposes six tools to the LLM. All DOM interactions are real. The table below makes the implementation honest about which tool has a deterministic fallback path and why.
 
-| Tool | Implementation | Notes |
-|---|---|---|
-| `read_page` | Real | Builds an accessibility-tree snapshot from the live DOM. |
-| `click_element` | Real | Resolves by `agentId` or CSS selector and dispatches a synthetic click compatible with React/Vue/Angular. |
-| `fill_input` | Real | Sets `.value` and dispatches `input` + `change` events so framework state updates. |
-| `extract_data` | Real | Walks tables / lists / role-tagged regions and returns structured rows. |
-| `summarize_page` | Real | Returns trimmed `innerText` from the main content region; the LLM does the actual summarization upstream. |
-| `draft_reply` | **LLM-authored by default, deterministic template fallback** | See below. |
+| Tool             | Implementation                                               | Notes                                                                                                     |
+| ---------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| `read_page`      | Real                                                         | Builds an accessibility-tree snapshot from the live DOM.                                                  |
+| `click_element`  | Real                                                         | Resolves by `agentId` or CSS selector and dispatches a synthetic click compatible with React/Vue/Angular. |
+| `fill_input`     | Real                                                         | Sets `.value` and dispatches `input` + `change` events so framework state updates.                        |
+| `extract_data`   | Real                                                         | Walks tables / lists / role-tagged regions and returns structured rows.                                   |
+| `summarize_page` | Real                                                         | Returns trimmed `innerText` from the main content region; the LLM does the actual summarization upstream. |
+| `draft_reply`    | **LLM-authored by default, deterministic template fallback** | See below.                                                                                                |
 
 ### `draft_reply` — honest scope
 
@@ -196,9 +205,9 @@ This trade-off is deliberate: a deterministic fallback is provably hallucination
 
 The extension ships with two manifests so the trade-off between agent capability and least-privilege is explicit:
 
-| File | Host permissions | Content scripts | Use when |
-|---|---|---|---|
-| `manifest.json` (default) | `<all_urls>` | Auto-injected at `document_start` | You want the full autonomous agent experience |
+| File                            | Host permissions        | Content scripts                           | Use when                                           |
+| ------------------------------- | ----------------------- | ----------------------------------------- | -------------------------------------------------- |
+| `manifest.json` (default)       | `<all_urls>`            | Auto-injected at `document_start`         | You want the full autonomous agent experience      |
 | `manifest.least-privilege.json` | none — `activeTab` only | Injected on-demand via `chrome.scripting` | You need the strictest possible permission surface |
 
 ### Why the default uses `<all_urls>`
@@ -235,7 +244,7 @@ The agent code path automatically falls back to on-demand injection via `chrome.
 
 ### Privacy boundary — be precise
 
-The backend is a stateless proxy: nothing is persisted, no logs of prompts or DOM. *However*, every LLM call necessarily transmits the page-context snapshot the agent extracted, because that's what the model reasons over. "Page context stays client-side" is true relative to *our* infrastructure — it is not a claim about the third-party LLM provider. Treat the LLM provider as a trust boundary you've explicitly opted into, same as any other AI feature.
+The backend is a stateless proxy: nothing is persisted, no logs of prompts or DOM. _However_, every LLM call necessarily transmits the page-context snapshot the agent extracted, because that's what the model reasons over. "Page context stays client-side" is true relative to _our_ infrastructure — it is not a claim about the third-party LLM provider. Treat the LLM provider as a trust boundary you've explicitly opted into, same as any other AI feature.
 
 ### Why an accessibility-tree snapshot, not raw DOM?
 

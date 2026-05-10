@@ -14,11 +14,11 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 const RESTRICTED_PREFIXES = ['chrome://', 'chrome-extension://', 'edge://', 'about:'];
 function isRestrictedUrl(url = '') {
-  return RESTRICTED_PREFIXES.some(prefix => url.startsWith(prefix));
+  return RESTRICTED_PREFIXES.some((prefix) => url.startsWith(prefix));
 }
 
 function filterLlmHistory(chatHistory) {
-  return chatHistory.filter(m => m.role !== 'navigation');
+  return chatHistory.filter((m) => m.role !== 'navigation');
 }
 
 const DEFAULT_FORM_SESSION = {
@@ -90,7 +90,7 @@ describe('LLM history — navigation role filtering', () => {
 
     const filtered = filterLlmHistory(history);
     expect(filtered).toHaveLength(3);
-    expect(filtered.every(m => m.role !== 'navigation')).toBe(true);
+    expect(filtered.every((m) => m.role !== 'navigation')).toBe(true);
   });
 
   it('preserves user, assistant, and tool messages', () => {
@@ -148,9 +148,7 @@ describe('Navigation separator — shouldInsertSeparator', () => {
   });
 
   it('inserts separator if last navigation was a different URL', () => {
-    const history = [
-      { role: 'navigation', url: 'https://linkedin.com' },
-    ];
+    const history = [{ role: 'navigation', url: 'https://linkedin.com' }];
     expect(shouldInsertSeparator(history, 'https://github.com')).toBe(true);
   });
 
@@ -260,12 +258,21 @@ describe('LLM response parsing', () => {
     for (let index = firstBrace; index < source.length; index++) {
       const char = source[index];
       if (inString) {
-        if (isEscaped) { isEscaped = false; continue; }
-        if (char === '\\') { isEscaped = true; continue; }
+        if (isEscaped) {
+          isEscaped = false;
+          continue;
+        }
+        if (char === '\\') {
+          isEscaped = true;
+          continue;
+        }
         if (char === '"') inString = false;
         continue;
       }
-      if (char === '"') { inString = true; continue; }
+      if (char === '"') {
+        inString = true;
+        continue;
+      }
       if (char === '{') depth++;
       if (char === '}') depth--;
       if (depth === 0) return source.slice(firstBrace, index + 1);
@@ -277,7 +284,9 @@ describe('LLM response parsing', () => {
     try {
       const direct = JSON.parse(content);
       if (direct?.action?.trim()) return direct;
-    } catch { /* fall through */ }
+    } catch {
+      /* fall through */
+    }
 
     const extracted = extractFirstJsonObject(content);
     if (!extracted) return null;
@@ -285,7 +294,9 @@ describe('LLM response parsing', () => {
     try {
       const parsed = JSON.parse(extracted);
       if (parsed?.action?.trim()) return parsed;
-    } catch { /* */ }
+    } catch {
+      /* */
+    }
 
     return null;
   }
@@ -302,14 +313,16 @@ describe('LLM response parsing', () => {
   });
 
   it('parses JSON wrapped in markdown code block', () => {
-    const raw = '```json\n{"thought":"ok","action":"final_answer","action_input":{},"answer":"Done"}\n```';
+    const raw =
+      '```json\n{"thought":"ok","action":"final_answer","action_input":{},"answer":"Done"}\n```';
     const result = parseStructuredResponse(raw);
     expect(result.action).toBe('final_answer');
     expect(result.answer).toBe('Done');
   });
 
   it('parses JSON embedded in prose text', () => {
-    const raw = 'Here is my response: {"action":"click_element","thought":"click","action_input":{"selector":"#btn"},"answer":null} end.';
+    const raw =
+      'Here is my response: {"action":"click_element","thought":"click","action_input":{"selector":"#btn"},"answer":null} end.';
     const result = parseStructuredResponse(raw);
     expect(result.action).toBe('click_element');
   });
@@ -321,7 +334,8 @@ describe('LLM response parsing', () => {
   });
 
   it('handles escaped quotes inside JSON strings', () => {
-    const raw = '{"thought":"says \\"hello\\"","action":"final_answer","action_input":{},"answer":"ok"}';
+    const raw =
+      '{"thought":"says \\"hello\\"","action":"final_answer","action_input":{},"answer":"ok"}';
     const result = parseStructuredResponse(raw);
     expect(result.action).toBe('final_answer');
   });

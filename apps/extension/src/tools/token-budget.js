@@ -24,7 +24,7 @@ class TokenBudgetManager {
 
     // Priority 1: Viewport elements
     if (truncated.elements) {
-      const visibleElements = truncated.elements.filter(el => el.visible);
+      const visibleElements = truncated.elements.filter((el) => el.visible);
       truncated.elements = visibleElements.slice(0, 20);
       usedTokens += this.estimateTokens(JSON.stringify(truncated.elements));
     }
@@ -46,14 +46,14 @@ class TokenBudgetManager {
 
     // Priority 4: Tables (summarize)
     if (truncated.tables && usedTokens < availableTokens * 0.7) {
-      truncated.tables = truncated.tables.map(table => ({
+      truncated.tables = truncated.tables.map((table) => ({
         ...table,
-        rows: table.rows.slice(0, 5)
+        rows: table.rows.slice(0, 5),
       }));
     }
 
     // Mark off-screen content
-    truncated.offScreen = `[... ${pageContext.elements?.filter(el => !el.visible).length || 0} off-screen elements]`;
+    truncated.offScreen = `[... ${pageContext.elements?.filter((el) => !el.visible).length || 0} off-screen elements]`;
 
     return truncated;
   }
@@ -74,9 +74,9 @@ class TokenBudgetManager {
     if (olderMessages.length > 0) {
       const summary = {
         role: 'system',
-        content: `Previous context: ${olderMessages.length} earlier messages summarized. User has been asking about: [${
-          olderMessages.map(m => m.content?.substring(0, 30)).join(', ')
-        }]`
+        content: `Previous context: ${olderMessages.length} earlier messages summarized. User has been asking about: [${olderMessages
+          .map((m) => m.content?.substring(0, 30))
+          .join(', ')}]`,
       };
       return [summary, ...recentMessages];
     }

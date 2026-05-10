@@ -26,9 +26,7 @@ describe('LLM Routes', () => {
 
 describe('Form Routes', () => {
   it('POST /api/forms/plan should return 400 without goal', async () => {
-    const res = await request(app)
-      .post('/api/forms/plan')
-      .send({ forms: [], chatHistory: [] });
+    const res = await request(app).post('/api/forms/plan').send({ forms: [], chatHistory: [] });
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('goal is required');
@@ -37,9 +35,7 @@ describe('Form Routes', () => {
 
 describe('Config Routes', () => {
   it('POST /api/config/update should update model', async () => {
-    const res = await request(app)
-      .post('/api/config/update')
-      .send({ model: 'gpt-3.5-turbo' });
+    const res = await request(app).post('/api/config/update').send({ model: 'gpt-3.5-turbo' });
 
     expect(res.status).toBe(200);
     expect(res.body.model).toBe('gpt-3.5-turbo');

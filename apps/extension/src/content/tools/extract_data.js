@@ -1,9 +1,9 @@
 /**
  * Extract Data Tool
- * 
+ *
  * Provides structured data extraction from any page.
  * Uses heuristics: semantic HTML, text patterns, DOM structure, ARIA.
- * 
+ *
  * Exposes:
  *   - extractData(target, schema)
  *   - extractPageData()
@@ -11,7 +11,6 @@
  *   - extractStructuredItems(target)
  *   - extractFromCards(container, schema)
  */
-
 
 // ═══════════════════════════════════════════════════
 // PUBLIC API (called by TOOL_REGISTRY)
@@ -47,7 +46,7 @@ function extractData(target, schema) {
     const data = {
       ...patterns,
       ...keyValues,
-      headings: headings
+      headings: headings,
     };
 
     const result = schema ? applySchema(data, schema) : cleanEmptyKeys(data);
@@ -56,9 +55,8 @@ function extractData(target, schema) {
       success: true,
       data: result,
       source: target || 'body',
-      message: `✓ Extracted data from ${target || 'page'}`
+      message: `✓ Extracted data from ${target || 'page'}`,
     };
-
   } catch (error) {
     return { error: error.message };
   }
@@ -77,7 +75,7 @@ function extractPageData() {
       return {
         ...structured,
         pagePatterns: cleanEmptyKeys(pagePatterns),
-        message: `✓ Extracted ${structured.count} items + page patterns`
+        message: `✓ Extracted ${structured.count} items + page patterns`,
       };
     }
 
@@ -89,9 +87,8 @@ function extractPageData() {
       success: true,
       data: cleanEmptyKeys({ ...patterns, ...keyValues }),
       source: 'page',
-      message: '✓ Extracted page-level data'
+      message: '✓ Extracted page-level data',
     };
-
   } catch (error) {
     return { error: error.message };
   }
@@ -105,15 +102,18 @@ function extractReplyContext(selector) {
   try {
     const field = selector
       ? document.querySelector(selector)
-      : document.querySelector('[contenteditable="true"], textarea:focus, textarea, [role="textbox"]');
+      : document.querySelector(
+          '[contenteditable="true"], textarea:focus, textarea, [role="textbox"]',
+        );
 
     if (!field) {
       return { error: 'No reply field found' };
     }
 
-    const container = field.closest(
-      '.thread, .conversation, .comments, .messages, .chat, article, .message-list, .discussion'
-    ) || field.parentElement;
+    const container =
+      field.closest(
+        '.thread, .conversation, .comments, .messages, .chat, article, .message-list, .discussion',
+      ) || field.parentElement;
 
     const messages = container ? sanitizeText(container.innerText).substring(0, 2000) : '';
 
@@ -122,14 +122,12 @@ function extractReplyContext(selector) {
       context: messages,
       fieldSelector: generateSelector(field),
       fieldType: field.tagName.toLowerCase(),
-      message: '✓ Extracted reply context'
+      message: '✓ Extracted reply context',
     };
-
   } catch (error) {
     return { error: error.message };
   }
 }
-
 
 // ═══════════════════════════════════════════════════
 // STRUCTURED ITEM EXTRACTOR (relationship-aware)
@@ -141,16 +139,23 @@ function extractReplyContext(selector) {
  */
 function extractStructuredItems(target) {
   try {
-    const container = target
-      ? (document.querySelector(target) || document.body)
-      : document.body;
+    const container = target ? document.querySelector(target) || document.body : document.body;
 
     // Find repeating item containers
     const itemSelectors = [
-      '[data-product-id]', '[data-item-id]', '[data-review-id]',
-      '.product-card', '.product', '.card', '.item', '.review',
-      'article', '.listing', '.result',
-      'li', 'tr'
+      '[data-product-id]',
+      '[data-item-id]',
+      '[data-review-id]',
+      '.product-card',
+      '.product',
+      '.card',
+      '.item',
+      '.review',
+      'article',
+      '.listing',
+      '.result',
+      'li',
+      'tr',
     ];
 
     let items = [];
@@ -170,7 +175,7 @@ function extractStructuredItems(target) {
     if (items.length === 0) {
       return {
         success: false,
-        error: 'No repeating items found on the page'
+        error: 'No repeating items found on the page',
       };
     }
 
@@ -183,23 +188,29 @@ function extractStructuredItems(target) {
 
       // Name/Title
       const heading = item.querySelector('h1, h2, h3, h4, h5, h6');
-      const title = heading?.innerText?.trim() ||
-                    item.getAttribute('aria-label') ||
-                    item.querySelector('.title, .name, .product-name, .heading')?.innerText?.trim() ||
-                    item.querySelector('strong, b')?.innerText?.trim() ||
-                    '';
+      const title =
+        heading?.innerText?.trim() ||
+        item.getAttribute('aria-label') ||
+        item.querySelector('.title, .name, .product-name, .heading')?.innerText?.trim() ||
+        item.querySelector('strong, b')?.innerText?.trim() ||
+        '';
       if (title) entry.name = sanitizeText(title).substring(0, 120);
 
       // Rating
-      const ratingEl = item.querySelector('[class*="rating"], [class*="star"], [data-rating], [aria-label*="star"], [aria-label*="rating"]');
+      const ratingEl = item.querySelector(
+        '[class*="rating"], [class*="star"], [data-rating], [aria-label*="star"], [aria-label*="rating"]',
+      );
       if (ratingEl) {
-        entry.rating = ratingEl.getAttribute('data-rating') ||
-                       ratingEl.getAttribute('aria-label') ||
-                       sanitizeText(ratingEl.innerText);
+        entry.rating =
+          ratingEl.getAttribute('data-rating') ||
+          ratingEl.getAttribute('aria-label') ||
+          sanitizeText(ratingEl.innerText);
       }
       if (!entry.rating) {
         const text = item.innerText || '';
-        const ratingMatch = text.match(/(?:[\d.]+\s*[★⭐])|(?:[★⭐☆]{2,})|(?:[\d.]+\s*(?:\/\s*5|out of\s*5))/i);
+        const ratingMatch = text.match(
+          /(?:[\d.]+\s*[★⭐])|(?:[★⭐☆]{2,})|(?:[\d.]+\s*(?:\/\s*5|out of\s*5))/i,
+        );
         if (ratingMatch) entry.rating = ratingMatch[0].trim();
       }
 
@@ -221,7 +232,7 @@ function extractStructuredItems(target) {
       // Reviewer / Author
       const reviewerEl = item.querySelector(
         '[class*="author"], [class*="reviewer"], [class*="user"], [class*="name"]:not([class*="product"]), ' +
-        '[data-author], [rel="author"], .by, cite'
+          '[data-author], [rel="author"], .by, cite',
       );
       if (reviewerEl) {
         const reviewerText = sanitizeText(reviewerEl.innerText);
@@ -230,7 +241,9 @@ function extractStructuredItems(target) {
         }
       }
       if (!entry.reviewer) {
-        const byMatch = (item.innerText || '').match(/(?:by|from|reviewed by|posted by)\s+([A-Z][a-z]+ [A-Z][a-z]+)/i);
+        const byMatch = (item.innerText || '').match(
+          /(?:by|from|reviewed by|posted by)\s+([A-Z][a-z]+ [A-Z][a-z]+)/i,
+        );
         if (byMatch) entry.reviewer = byMatch[1].trim();
       }
 
@@ -254,7 +267,7 @@ function extractStructuredItems(target) {
 
       // Data attributes
       if (item.dataset) {
-        Object.keys(item.dataset).forEach(key => {
+        Object.keys(item.dataset).forEach((key) => {
           if (!entry[key] && item.dataset[key]) {
             entry[key] = item.dataset[key];
           }
@@ -264,7 +277,7 @@ function extractStructuredItems(target) {
       // Actions (buttons/links)
       const actions = [];
       const actionBtns = item.querySelectorAll('button, [role="button"], a.btn, a.button');
-      actionBtns.forEach(btn => {
+      actionBtns.forEach((btn) => {
         const text = sanitizeText(btn.innerText || btn.getAttribute('aria-label') || '');
         if (text) {
           actions.push({ text, selector: generateSelector(btn) });
@@ -276,7 +289,7 @@ function extractStructuredItems(target) {
     });
 
     // Sort by rating (highest first) if ratings exist
-    const withRatings = structured.filter(item => item.rating);
+    const withRatings = structured.filter((item) => item.rating);
     if (withRatings.length > 0) {
       withRatings.sort((a, b) => {
         const ratingA = parseFloat((a.rating || '').match(/[\d.]+/)?.[0] || '0');
@@ -290,14 +303,12 @@ function extractStructuredItems(target) {
       items: structured,
       count: structured.length,
       topRated: withRatings.length > 0 ? withRatings[0] : null,
-      message: `✓ Extracted ${structured.length} structured items${withRatings.length > 0 ? ', sorted by rating' : ''}`
+      message: `✓ Extracted ${structured.length} structured items${withRatings.length > 0 ? ', sorted by rating' : ''}`,
     };
-
   } catch (error) {
     return { error: error.message };
   }
 }
-
 
 // ═══════════════════════════════════════════════════
 // CARD-BASED EXTRACTOR (generic)
@@ -315,7 +326,7 @@ function extractFromCards(container, schema) {
 
     // 1. Data-* attributes
     if (card.dataset && Object.keys(card.dataset).length > 0) {
-      Object.keys(card.dataset).forEach(key => {
+      Object.keys(card.dataset).forEach((key) => {
         entry[key] = card.dataset[key];
       });
     }
@@ -359,7 +370,6 @@ function extractFromCards(container, schema) {
   return data;
 }
 
-
 // ═══════════════════════════════════════════════════
 // SEMANTIC HTML EXTRACTORS
 // ═══════════════════════════════════════════════════
@@ -368,9 +378,9 @@ function extractHeadings(element) {
   const headings = element.querySelectorAll('h1, h2, h3, h4, h5, h6');
   if (headings.length === 0) return undefined;
 
-  return Array.from(headings).map(h => ({
+  return Array.from(headings).map((h) => ({
     level: parseInt(h.tagName[1]),
-    text: sanitizeText(h.innerText)
+    text: sanitizeText(h.innerText),
   }));
 }
 
@@ -379,8 +389,8 @@ function extractParagraphs(element) {
   if (paragraphs.length === 0) return undefined;
 
   const texts = Array.from(paragraphs)
-    .map(p => sanitizeText(p.innerText))
-    .filter(t => t.length > 0);
+    .map((p) => sanitizeText(p.innerText))
+    .filter((t) => t.length > 0);
 
   return texts.length > 0 ? texts : undefined;
 }
@@ -389,10 +399,10 @@ function extractLinks(element) {
   const links = element.querySelectorAll('a[href]');
   if (links.length === 0) return undefined;
 
-  return Array.from(links).map(link => ({
+  return Array.from(links).map((link) => ({
     text: sanitizeText(link.innerText || link.getAttribute('aria-label') || ''),
     href: link.href,
-    title: link.title || undefined
+    title: link.title || undefined,
   }));
 }
 
@@ -400,23 +410,26 @@ function extractImages(element) {
   const images = element.querySelectorAll('img, picture source, [role="img"]');
   if (images.length === 0) return undefined;
 
-  return Array.from(images).map(img => ({
-    src: img.src || img.srcset || img.dataset.src || '',
-    alt: img.alt || img.getAttribute('aria-label') || ''
-  })).filter(img => img.src);
+  return Array.from(images)
+    .map((img) => ({
+      src: img.src || img.srcset || img.dataset.src || '',
+      alt: img.alt || img.getAttribute('aria-label') || '',
+    }))
+    .filter((img) => img.src);
 }
 
 function extractButtons(element) {
-  const buttons = element.querySelectorAll('button, [role="button"], input[type="button"], input[type="submit"]');
+  const buttons = element.querySelectorAll(
+    'button, [role="button"], input[type="button"], input[type="submit"]',
+  );
   if (buttons.length === 0) return undefined;
 
-  return Array.from(buttons).map(btn => ({
+  return Array.from(buttons).map((btn) => ({
     text: sanitizeText(btn.innerText || btn.value || btn.getAttribute('aria-label') || ''),
     disabled: btn.disabled || false,
-    selector: generateSelector(btn)
+    selector: generateSelector(btn),
   }));
 }
-
 
 // ═══════════════════════════════════════════════════
 // ARIA & ACCESSIBILITY DATA
@@ -439,15 +452,14 @@ function extractAriaData(element) {
 
   const roleElements = element.querySelectorAll('[role]');
   if (roleElements.length > 0) {
-    data.roles = Array.from(roleElements).map(el => ({
+    data.roles = Array.from(roleElements).map((el) => ({
       role: el.getAttribute('role'),
-      text: sanitizeText(el.innerText).substring(0, 100)
+      text: sanitizeText(el.innerText).substring(0, 100),
     }));
   }
 
   return data;
 }
-
 
 // ═══════════════════════════════════════════════════
 // KEY-VALUE PAIR DETECTION
@@ -458,7 +470,7 @@ function extractKeyValuePairs(element) {
 
   // Pattern 1: <dt>/<dd>
   const dtElements = element.querySelectorAll('dt');
-  dtElements.forEach(dt => {
+  dtElements.forEach((dt) => {
     const dd = dt.nextElementSibling;
     if (dd && dd.tagName === 'DD') {
       pairs[normalizeDataKey(dt.innerText)] = sanitizeText(dd.innerText);
@@ -467,7 +479,7 @@ function extractKeyValuePairs(element) {
 
   // Pattern 2: <label> + value
   const labels = element.querySelectorAll('label');
-  labels.forEach(label => {
+  labels.forEach((label) => {
     const forEl = label.htmlFor ? document.getElementById(label.htmlFor) : null;
     if (forEl && forEl.value) {
       pairs[normalizeDataKey(label.innerText)] = forEl.value;
@@ -476,7 +488,7 @@ function extractKeyValuePairs(element) {
 
   // Pattern 3: "Key: Value" in text
   const textNodes = element.innerText.split('\n');
-  textNodes.forEach(line => {
+  textNodes.forEach((line) => {
     const colonMatch = line.match(/^([^:]{2,30}):\s*(.+)$/);
     if (colonMatch) {
       const key = colonMatch[1].trim();
@@ -489,7 +501,7 @@ function extractKeyValuePairs(element) {
 
   // Pattern 4: <strong>/<b> followed by text
   const bolds = element.querySelectorAll('strong, b');
-  bolds.forEach(bold => {
+  bolds.forEach((bold) => {
     const nextSibling = bold.nextSibling;
     if (nextSibling && nextSibling.textContent.trim()) {
       const key = bold.innerText.replace(':', '').trim();
@@ -503,7 +515,6 @@ function extractKeyValuePairs(element) {
   return pairs;
 }
 
-
 // ═══════════════════════════════════════════════════
 // SCHEMA APPLICATION
 // ═══════════════════════════════════════════════════
@@ -513,7 +524,7 @@ function applySchema(entry, schema) {
 
   const result = {};
 
-  schema.fields.forEach(field => {
+  schema.fields.forEach((field) => {
     const fieldLower = field.toLowerCase();
 
     if (entry[field] !== undefined) {
@@ -541,7 +552,11 @@ function applySchema(entry, schema) {
       result[field] = entry.headings[0]?.text;
     }
 
-    if (!result[field] && entry.paragraphs && ['description', 'content', 'body', 'text'].includes(fieldLower)) {
+    if (
+      !result[field] &&
+      entry.paragraphs &&
+      ['description', 'content', 'body', 'text'].includes(fieldLower)
+    ) {
       result[field] = entry.paragraphs[0];
     }
 

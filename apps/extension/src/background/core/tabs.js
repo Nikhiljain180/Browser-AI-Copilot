@@ -31,7 +31,7 @@ const INJECTION_ERROR_PATTERNS = [
 ];
 
 CopilotSw.isRestrictedUrl = function isRestrictedUrl(url = '') {
-  return RESTRICTED_PREFIXES.some(prefix => url.startsWith(prefix));
+  return RESTRICTED_PREFIXES.some((prefix) => url.startsWith(prefix));
 };
 
 CopilotSw.ensureContentScriptInjected = async function ensureContentScriptInjected(tabId) {
@@ -41,7 +41,8 @@ CopilotSw.ensureContentScriptInjected = async function ensureContentScriptInject
   }
 
   // Probe whether the content script is already alive
-  const alive = await chrome.tabs.sendMessage(tabId, { action: 'ping' })
+  const alive = await chrome.tabs
+    .sendMessage(tabId, { action: 'ping' })
     .then(() => true)
     .catch(() => false);
 
@@ -54,7 +55,7 @@ CopilotSw.ensureContentScriptInjected = async function ensureContentScriptInject
     });
   } catch (injectionError) {
     const msg = injectionError?.message || '';
-    const isRestricted = INJECTION_ERROR_PATTERNS.some(pattern => msg.includes(pattern));
+    const isRestricted = INJECTION_ERROR_PATTERNS.some((pattern) => msg.includes(pattern));
     if (isRestricted) {
       throw new Error('Open the Copilot on a normal web page, then try again.');
     }
@@ -70,7 +71,7 @@ CopilotSw.getUsableTab = async function getUsableTab() {
 
   const tabs = await chrome.tabs.query({ lastFocusedWindow: true });
   const fallbackTab = tabs
-    .filter(tab => Boolean(tab.id))
+    .filter((tab) => Boolean(tab.id))
     .sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0))[0];
 
   if (!fallbackTab) {

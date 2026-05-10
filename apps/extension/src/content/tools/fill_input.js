@@ -7,7 +7,9 @@ function fillInput(target, value) {
   try {
     const element = resolveElement(target);
     if (!element) {
-      return { error: `Input not found: ${target?.agentId || target?.selector || 'unknown target'}` };
+      return {
+        error: `Input not found: ${target?.agentId || target?.selector || 'unknown target'}`,
+      };
     }
 
     element.focus();
@@ -99,12 +101,10 @@ function fillInput(target, value) {
     fireAllEvents(element);
 
     return result;
-
   } catch (error) {
     return { error: error.message };
   }
 }
-
 
 // ═══════════════════════════════════════════════════
 // INDIVIDUAL FILL HANDLERS
@@ -116,16 +116,15 @@ function fillInput(target, value) {
 function fillTextInput(element, value) {
   // Clear existing value
   element.value = '';
-  
+
   // Use native setter to bypass React/Vue/Angular controlled components
   setNativeValue(element, String(value));
 
   return {
     success: true,
-    message: `✓ Filled ${element.type || 'text'} with: "${value}"`
+    message: `✓ Filled ${element.type || 'text'} with: "${value}"`,
   };
 }
-
 
 /**
  * SELECT DROPDOWN — smart multi-level matching
@@ -151,26 +150,29 @@ function fillSelect(selectElement, value) {
   }
 
   // Level 1: Exact match on value attribute
-  if (!match) match = options.find(opt => opt.value.toLowerCase() === searchVal);
+  if (!match) match = options.find((opt) => opt.value.toLowerCase() === searchVal);
 
   // Level 2: Exact match on visible text
   if (!match) {
-    match = options.find(opt => opt.textContent.toLowerCase().trim() === searchVal);
+    match = options.find((opt) => opt.textContent.toLowerCase().trim() === searchVal);
   }
 
   // Level 3: Option text contains search value
   if (!match) {
-    const matches = options.filter(opt => opt.textContent.toLowerCase().includes(searchVal));
+    const matches = options.filter((opt) => opt.textContent.toLowerCase().includes(searchVal));
     if (matches.length === 1) match = matches[0];
     if (matches.length > 1) {
-      const candidates = matches.slice(0, 5).map(opt => opt.textContent.trim()).filter(Boolean);
+      const candidates = matches
+        .slice(0, 5)
+        .map((opt) => opt.textContent.trim())
+        .filter(Boolean);
       return { error: `Ambiguous option for: "${value}". Candidates: ${candidates.join(' | ')}` };
     }
   }
 
   // Level 4: Search value contains option value/text
   if (!match) {
-    const matches = options.filter(opt => {
+    const matches = options.filter((opt) => {
       if (!opt.value) return false;
       const optVal = opt.value.toLowerCase();
       const optText = opt.textContent.toLowerCase().trim();
@@ -178,22 +180,25 @@ function fillSelect(selectElement, value) {
     });
     if (matches.length === 1) match = matches[0];
     if (matches.length > 1) {
-      const candidates = matches.slice(0, 5).map(opt => opt.textContent.trim()).filter(Boolean);
+      const candidates = matches
+        .slice(0, 5)
+        .map((opt) => opt.textContent.trim())
+        .filter(Boolean);
       return { error: `Ambiguous option for: "${value}". Candidates: ${candidates.join(' | ')}` };
     }
   }
 
   // Level 5: Fuzzy keyword matching
   if (!match) {
-    const searchWords = searchVal.split(/[\s,\-—/]+/).filter(w => w.length > 2);
+    const searchWords = searchVal.split(/[\s,\-—/]+/).filter((w) => w.length > 2);
     let bestScore = 0;
     const bestMatches = [];
 
-    options.forEach(opt => {
+    options.forEach((opt) => {
       if (!opt.value) return;
       const optText = opt.textContent.toLowerCase();
       let score = 0;
-      searchWords.forEach(word => {
+      searchWords.forEach((word) => {
         if (optText.includes(word)) score++;
       });
       if (score <= 0) return;
@@ -208,7 +213,10 @@ function fillSelect(selectElement, value) {
 
     if (bestScore > 0 && bestMatches.length === 1) match = bestMatches[0];
     if (bestScore > 0 && bestMatches.length > 1) {
-      const candidates = bestMatches.slice(0, 5).map(opt => opt.textContent.trim()).filter(Boolean);
+      const candidates = bestMatches
+        .slice(0, 5)
+        .map((opt) => opt.textContent.trim())
+        .filter(Boolean);
       return { error: `Ambiguous option for: "${value}". Candidates: ${candidates.join(' | ')}` };
     }
   }
@@ -219,20 +227,19 @@ function fillSelect(selectElement, value) {
     selectElement.dispatchEvent(new Event('change', { bubbles: true }));
     return {
       success: true,
-      message: `✓ Selected: "${match.textContent.trim()}" (value: ${match.value})`
+      message: `✓ Selected: "${match.textContent.trim()}" (value: ${match.value})`,
     };
   }
 
   return { error: `No matching option for: "${value}"` };
 }
 
-
 /**
  * CHECKBOX — handles true/false, yes/no, check/uncheck
  */
 function fillCheckbox(element, value) {
   const shouldCheck = parseBoolean(value);
-  
+
   if (element.checked !== shouldCheck) {
     element.checked = shouldCheck;
     element.dispatchEvent(new Event('click', { bubbles: true }));
@@ -240,10 +247,9 @@ function fillCheckbox(element, value) {
 
   return {
     success: true,
-    message: `✓ Checkbox ${shouldCheck ? 'checked' : 'unchecked'}`
+    message: `✓ Checkbox ${shouldCheck ? 'checked' : 'unchecked'}`,
   };
 }
-
 
 /**
  * RADIO BUTTON — finds the right radio in the group by value or label
@@ -251,12 +257,12 @@ function fillCheckbox(element, value) {
 function fillRadio(element, value) {
   const name = element.name;
   const searchVal = String(value).toLowerCase().trim();
-  
+
   // Get all radio buttons in this group
   const radios = document.querySelectorAll(`input[type="radio"][name="${name}"]`);
   let matched = null;
 
-  radios.forEach(radio => {
+  radios.forEach((radio) => {
     // Match by value
     if (radio.value.toLowerCase() === searchVal) {
       matched = radio;
@@ -272,9 +278,11 @@ function fillRadio(element, value) {
 
   // Fuzzy: try partial match on value
   if (!matched) {
-    radios.forEach(radio => {
-      if (radio.value.toLowerCase().includes(searchVal) || 
-          searchVal.includes(radio.value.toLowerCase())) {
+    radios.forEach((radio) => {
+      if (
+        radio.value.toLowerCase().includes(searchVal) ||
+        searchVal.includes(radio.value.toLowerCase())
+      ) {
         matched = radio;
       }
     });
@@ -286,13 +294,12 @@ function fillRadio(element, value) {
     matched.dispatchEvent(new Event('click', { bubbles: true }));
     return {
       success: true,
-      message: `✓ Selected radio: "${matched.value}"`
+      message: `✓ Selected radio: "${matched.value}"`,
     };
   }
 
   return { error: `No matching radio option for: "${value}"` };
 }
-
 
 /**
  * DATE / TIME / DATETIME-LOCAL
@@ -329,10 +336,9 @@ function fillDateTime(element, value, inputType) {
 
   return {
     success: true,
-    message: `✓ Set ${inputType} to: "${formattedValue}"`
+    message: `✓ Set ${inputType} to: "${formattedValue}"`,
   };
 }
-
 
 /**
  * RANGE (slider)
@@ -344,15 +350,14 @@ function fillRange(element, value) {
 
   // Clamp to valid range
   const clamped = Math.min(Math.max(numValue, min), max);
-  
+
   setNativeValue(element, String(clamped));
 
   return {
     success: true,
-    message: `✓ Set range slider to: ${clamped} (min: ${min}, max: ${max})`
+    message: `✓ Set range slider to: ${clamped} (min: ${min}, max: ${max})`,
   };
 }
-
 
 /**
  * COLOR PICKER
@@ -362,10 +367,18 @@ function fillColor(element, value) {
 
   // Convert color names to hex
   const colorMap = {
-    red: '#ff0000', blue: '#0000ff', green: '#008000',
-    black: '#000000', white: '#ffffff', yellow: '#ffff00',
-    purple: '#800080', orange: '#ffa500', pink: '#ffc0cb',
-    gray: '#808080', grey: '#808080', cyan: '#00ffff'
+    red: '#ff0000',
+    blue: '#0000ff',
+    green: '#008000',
+    black: '#000000',
+    white: '#ffffff',
+    yellow: '#ffff00',
+    purple: '#800080',
+    orange: '#ffa500',
+    pink: '#ffc0cb',
+    gray: '#808080',
+    grey: '#808080',
+    cyan: '#00ffff',
   };
 
   if (colorMap[value.toLowerCase()]) {
@@ -376,17 +389,16 @@ function fillColor(element, value) {
   if (!hex.startsWith('#')) hex = '#' + hex;
   if (hex.length === 4) {
     // Convert #RGB to #RRGGBB
-    hex = '#' + hex[1]+hex[1] + hex[2]+hex[2] + hex[3]+hex[3];
+    hex = '#' + hex[1] + hex[1] + hex[2] + hex[2] + hex[3] + hex[3];
   }
 
   element.value = hex;
 
   return {
     success: true,
-    message: `✓ Set color to: ${hex}`
+    message: `✓ Set color to: ${hex}`,
   };
 }
-
 
 /**
  * CONTENTEDITABLE (rich text editors like Quill, TipTap, etc.)
@@ -399,19 +411,20 @@ function fillContentEditable(element, value) {
   element.innerText = value;
 
   // Dispatch input event for reactive frameworks
-  element.dispatchEvent(new InputEvent('input', {
-    bubbles: true,
-    cancelable: true,
-    inputType: 'insertText',
-    data: value
-  }));
+  element.dispatchEvent(
+    new InputEvent('input', {
+      bubbles: true,
+      cancelable: true,
+      inputType: 'insertText',
+      data: value,
+    }),
+  );
 
   return {
     success: true,
-    message: `✓ Filled contenteditable with: "${value.substring(0, 50)}..."`
+    message: `✓ Filled contenteditable with: "${value.substring(0, 50)}..."`,
   };
 }
-
 
 // ═══════════════════════════════════════════════════
 // UTILITY FUNCTIONS
@@ -421,9 +434,7 @@ function fillContentEditable(element, value) {
  * Set value using native setter (bypasses React/Vue/Angular)
  */
 function setNativeValue(element, value) {
-  const descriptor = Object.getOwnPropertyDescriptor(
-    Object.getPrototypeOf(element), 'value'
-  );
+  const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), 'value');
 
   if (descriptor && descriptor.set) {
     descriptor.set.call(element, value);
@@ -432,20 +443,18 @@ function setNativeValue(element, value) {
   }
 }
 
-
 /**
  * Fire all necessary events for framework compatibility
  */
 function fireAllEvents(element) {
   const events = ['input', 'change', 'blur'];
-  events.forEach(eventType => {
+  events.forEach((eventType) => {
     element.dispatchEvent(new Event(eventType, { bubbles: true }));
   });
 
   // Also fire for React synthetic events
   element.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
 }
-
 
 /**
  * Parse boolean from various string formats
@@ -455,7 +464,6 @@ function parseBoolean(value) {
   const str = String(value).toLowerCase().trim();
   return ['true', 'yes', '1', 'on', 'check', 'checked', 'enable', 'enabled'].includes(str);
 }
-
 
 /**
  * Find the <label> associated with an element
@@ -477,7 +485,6 @@ function findLabelForElement(element) {
 
   return null;
 }
-
 
 /**
  * Parse time string ("2:30 PM" → "14:30")

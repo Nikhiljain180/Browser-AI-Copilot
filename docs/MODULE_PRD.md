@@ -110,6 +110,7 @@ Content scripts operate in the current page DOM. Cross-origin iframes remain a b
 ## 5.3 Dynamic SPA Pages
 
 **Current handling:**
+
 - `navigation.ts` hooks `pushState`, `replaceState`, `popstate`, `hashchange`
 - `MutationObserver` watches DOM updates
 - Service worker refreshes page context on `pageContextChanged`
@@ -159,6 +160,7 @@ For each scenario, the pattern is: identify which layer changes, define new data
 ## 7.1 Auto-Detect And Fill All Forms On A Page
 
 **Implementation plan:**
+
 - Extend form inventory extraction to include all visible forms with grouped fields
 - Add a background workflow mode: `fill_all_forms`
 - Send all forms to backend `/api/forms/plan` or a new `/api/forms/plan-all`
@@ -167,6 +169,7 @@ For each scenario, the pattern is: identify which layer changes, define new data
 - Require approval only for submit/post steps
 
 **Key talking points:**
+
 - Do not flatten unrelated forms together
 - Preserve per-form submit boundaries
 - Ask follow-up questions only when needed
@@ -174,10 +177,12 @@ For each scenario, the pattern is: identify which layer changes, define new data
 ## 7.2 Remember Context Across Different Tabs
 
 **Implementation plan:**
+
 - Introduce a memory map keyed by `tabId` or URL
 - Store: chat history, last page context summary, last active goal, tab title/url
 
 **Data model:**
+
 ```ts
 type TabSession = {
   tabId: number;
@@ -194,6 +199,7 @@ type TabSession = {
 ## 7.3 Add Screenshot Capture And Visual Understanding
 
 **Implementation plan:**
+
 - Capture screenshot from extension API
 - Attach to backend request for multimodal model
 - Use DOM-first mode normally
@@ -204,6 +210,7 @@ type TabSession = {
 ## 7.4 Implement Rate Limiting And Caching On The Backend
 
 **Implementation plan:**
+
 - Add auth-aware middleware
 - Add per-user request counters in Redis
 - Cache safe informational responses using goal + page hash + model hash
@@ -211,6 +218,7 @@ type TabSession = {
 ## 7.5 Multi-Step Workflow: "Find all emails and draft a reply to each"
 
 **Implementation plan:**
+
 - Add extraction step for emails
 - Generate a list of targets
 - For each target: navigate or locate reply field, draft reply, stop for approval before send
@@ -220,6 +228,7 @@ type TabSession = {
 ## 7.6 Add Keyboard Shortcuts
 
 **Implementation plan:**
+
 - Use manifest `commands`
 - Map shortcuts to background actions (open side panel, summarize page, stop current run)
 
@@ -228,6 +237,7 @@ type TabSession = {
 ## 7.7 Make It Work Better On SPAs
 
 **Implementation plan:**
+
 - Improve mutation debouncing
 - Add semantic page signatures
 - Re-scan only changed regions when possible
@@ -236,6 +246,7 @@ type TabSession = {
 ## 7.8 Add A Record And Replay Macro Feature
 
 **Implementation plan:**
+
 - Capture approved tool events and relevant page anchors
 - Serialize macro as ordered steps
 - Replay with validation after each step
@@ -245,6 +256,7 @@ type TabSession = {
 ## 7.9 Implement Streaming Responses In Chat UI
 
 **Implementation plan:**
+
 - Backend uses SSE
 - UI appends chunks
 - Background differentiates between status/thought stream and final action JSON
@@ -254,6 +266,7 @@ type TabSession = {
 ## 7.10 Add Authentication And User Session Management
 
 **Implementation plan:**
+
 - Backend: login, session token, per-user quotas
 - Extension: secure token storage and refresh handling
 - API: include auth header on `/api/llm/*` and `/api/forms/*`
@@ -267,6 +280,7 @@ type TabSession = {
 ## 8.1 How To Scale To 10,000 Concurrent Users
 
 **Architecture changes:**
+
 - Load balancer in front of backend
 - Stateless API replicas
 - Redis for rate limiting/caching/session metadata

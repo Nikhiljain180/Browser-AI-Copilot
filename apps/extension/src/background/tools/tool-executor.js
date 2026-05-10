@@ -15,7 +15,9 @@ CopilotSw.classifyAction = function classifyAction(toolName, toolInput) {
     return {
       requiresApproval: true,
       riskLevel: 'high',
-      actionDescription: description || `Click "${toolInput?.selector || 'element'}" — this looks like a destructive submit/delete action.`,
+      actionDescription:
+        description ||
+        `Click "${toolInput?.selector || 'element'}" — this looks like a destructive submit/delete action.`,
     };
   }
 
@@ -42,14 +44,18 @@ const TOOL_RETRY_DELAY_MS = 250;
 const MAX_TOOL_ATTEMPTS = 2;
 
 function delay(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function generateApprovalId() {
   return `${Date.now()}_${Math.random().toString(36).slice(2)}`;
 }
 
-CopilotSw.executeToolWithApproval = async function executeToolWithApproval(toolName, toolInput, tabId) {
+CopilotSw.executeToolWithApproval = async function executeToolWithApproval(
+  toolName,
+  toolInput,
+  tabId,
+) {
   const classification = CopilotSw.classifyAction(toolName, toolInput);
 
   if (!classification.requiresApproval) {

@@ -3,10 +3,12 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 // Replicate setNativeValue + fillInput logic from the source
 function setNativeValue(element, value) {
   const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-    window.HTMLInputElement.prototype, 'value'
+    window.HTMLInputElement.prototype,
+    'value',
   )?.set;
   const nativeTextAreaValueSetter = Object.getOwnPropertyDescriptor(
-    window.HTMLTextAreaElement.prototype, 'value'
+    window.HTMLTextAreaElement.prototype,
+    'value',
   )?.set;
 
   if (element.tagName === 'TEXTAREA' && nativeTextAreaValueSetter) {
@@ -43,15 +45,20 @@ function fillInput(element, value) {
         match = options[idx - 1];
       }
 
-      if (!match) match = options.find(opt => opt.value.toLowerCase() === searchVal);
-      if (!match) match = options.find(opt => opt.textContent.toLowerCase().trim() === searchVal);
+      if (!match) match = options.find((opt) => opt.value.toLowerCase() === searchVal);
+      if (!match) match = options.find((opt) => opt.textContent.toLowerCase().trim() === searchVal);
 
       if (!match) {
-        const matches = options.filter(opt => opt.textContent.toLowerCase().includes(searchVal));
+        const matches = options.filter((opt) => opt.textContent.toLowerCase().includes(searchVal));
         if (matches.length === 1) match = matches[0];
         if (matches.length > 1) {
-          const candidates = matches.slice(0, 5).map(opt => opt.textContent.trim()).filter(Boolean);
-          return { error: `Ambiguous option for: "${value}". Candidates: ${candidates.join(' | ')}` };
+          const candidates = matches
+            .slice(0, 5)
+            .map((opt) => opt.textContent.trim())
+            .filter(Boolean);
+          return {
+            error: `Ambiguous option for: "${value}". Candidates: ${candidates.join(' | ')}`,
+          };
         }
       }
 
@@ -96,7 +103,9 @@ describe('fill_input tool', () => {
     container.appendChild(input);
 
     let inputFired = false;
-    input.addEventListener('input', () => { inputFired = true; });
+    input.addEventListener('input', () => {
+      inputFired = true;
+    });
 
     const result = fillInput(input, 'Nikhil');
     expect(input.value).toBe('Nikhil');
@@ -139,7 +148,7 @@ describe('fill_input tool', () => {
 
   it('fills a select element by setting its value directly', () => {
     const select = document.createElement('select');
-    ['opt1', 'opt2'].forEach(v => {
+    ['opt1', 'opt2'].forEach((v) => {
       const opt = document.createElement('option');
       opt.value = v;
       opt.text = v;
@@ -154,7 +163,7 @@ describe('fill_input tool', () => {
 
   it('fills a select element by ordinal ("option 2")', () => {
     const select = document.createElement('select');
-    ['USB-A', 'USB-C', 'Thunderbolt'].forEach(v => {
+    ['USB-A', 'USB-C', 'Thunderbolt'].forEach((v) => {
       const opt = document.createElement('option');
       opt.value = v;
       opt.text = v;
@@ -169,7 +178,7 @@ describe('fill_input tool', () => {
 
   it('returns an ambiguous error when multiple select options match', () => {
     const select = document.createElement('select');
-    ['USB-A', 'USB-C', 'No USB'].forEach(v => {
+    ['USB-A', 'USB-C', 'No USB'].forEach((v) => {
       const opt = document.createElement('option');
       opt.value = v;
       opt.text = v;

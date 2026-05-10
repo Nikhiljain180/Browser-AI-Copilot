@@ -2,19 +2,23 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 // Replicate the table/list extraction logic from extract_data.js
 function normalizeDataKey(header) {
-  return String(header || '')
-    .trim().toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '') || 'col';
+  return (
+    String(header || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '') || 'col'
+  );
 }
 
 function extractFromTable(table) {
-  const headers = Array.from(table.querySelectorAll('thead th, thead td'))
-    .map(cell => cell.textContent.trim());
+  const headers = Array.from(table.querySelectorAll('thead th, thead td')).map((cell) =>
+    cell.textContent.trim(),
+  );
   const rows = table.querySelectorAll('tbody tr');
   const data = [];
 
-  rows.forEach(row => {
+  rows.forEach((row) => {
     const cells = row.querySelectorAll('td');
     const rowData = {};
     cells.forEach((cell, idx) => {
@@ -29,7 +33,7 @@ function extractFromTable(table) {
 
 function extractFromList(list) {
   const items = list.querySelectorAll('li');
-  const data = Array.from(items).map(item => ({ text: item.textContent.trim() }));
+  const data = Array.from(items).map((item) => ({ text: item.textContent.trim() }));
   return { success: true, data, count: data.length };
 }
 
@@ -76,7 +80,7 @@ describe('extract_data tool', () => {
     const result = extractFromTable(container.querySelector('table'));
     expect(result.data[0]).toHaveProperty('product_name', 'Monitor');
     // "Unit Price ($)" → non-alphanumeric chars become underscores, trailing stripped
-    const key = Object.keys(result.data[0]).find(k => k.startsWith('unit_price'));
+    const key = Object.keys(result.data[0]).find((k) => k.startsWith('unit_price'));
     expect(key).toBeDefined();
     expect(result.data[0][key]).toBe('599');
   });
@@ -133,6 +137,6 @@ describe('extract_data tool', () => {
 
     const result = extractFromTable(container.querySelector('table'));
     expect(result.count).toBe(3);
-    expect(result.data.every(row => 'item' in row && 'category' in row)).toBe(true);
+    expect(result.data.every((row) => 'item' in row && 'category' in row)).toBe(true);
   });
 });

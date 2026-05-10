@@ -1,12 +1,11 @@
-
-
 # Browser AI Copilot — Interview Questions
 
 2Answer framework:
+
 1. State the design principle
 2. Explain what this codebase does
 3. Admit the trade-off
-4aft. Describe the next production improvement
+   4aft. Describe the next production improvement
 
 ---
 

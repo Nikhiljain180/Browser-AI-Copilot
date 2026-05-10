@@ -15,7 +15,7 @@ export function useChat() {
   const visibleMessages = computed(() => {
     // Render tool messages as "Activity" cards (professional trace).
     if (showActivity.value) return messages.value;
-    return messages.value.filter(message => message.role !== 'tool');
+    return messages.value.filter((message) => message.role !== 'tool');
   });
 
   function pushLiveThought(text) {

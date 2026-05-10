@@ -9,7 +9,7 @@ function generateSelector(element) {
     'name',
     'type',
     'role',
-    'aria-label'
+    'aria-label',
   ];
 
   for (const attr of preferredAttributes) {
@@ -21,7 +21,7 @@ function generateSelector(element) {
 
   const classNames = Array.from(element.classList || []).filter(Boolean);
   if (classNames.length > 0) {
-    return `${tagName}.${classNames.map(name => CSS.escape(name)).join('.')}`;
+    return `${tagName}.${classNames.map((name) => CSS.escape(name)).join('.')}`;
   }
 
   const parent = element.parentElement;
@@ -29,8 +29,9 @@ function generateSelector(element) {
     return tagName;
   }
 
-  const siblingsOfSameTag = Array.from(parent.children)
-    .filter(child => child.tagName.toLowerCase() === tagName);
+  const siblingsOfSameTag = Array.from(parent.children).filter(
+    (child) => child.tagName.toLowerCase() === tagName,
+  );
 
   if (siblingsOfSameTag.length === 1) {
     const parentSelector = generateSelector(parent);

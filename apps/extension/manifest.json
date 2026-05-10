@@ -3,13 +3,7 @@
   "name": "Browser AI Copilot",
   "version": "1.0.0",
   "description": "Production-grade AI Agent for autonomous browser interactions with human-in-the-loop safety gates",
-  "permissions": [
-    "activeTab",
-    "tabs",
-    "scripting",
-    "storage",
-    "sidePanel"
-  ],
+  "permissions": ["activeTab", "tabs", "scripting", "storage", "sidePanel"],
   "action": {
     "default_title": "Browser AI Copilot"
   },
@@ -20,26 +14,26 @@
     "service_worker": "src/background/service-worker.js"
   },
   "content_scripts": [
-  {
-    "matches": ["<all_urls>"],
-    "js": [
-      "src/content/core/utils.js",
-      "src/content/core/sanitizer.js",
-      "src/content/core/registry.js",
-      "src/content/core/selector.js",
-      "src/content/core/token-budget.js",
-      "src/content/observers/navigation.js",
-      "src/content/tools/read_page.js",
-      "src/content/tools/click_element.js",
-      "src/content/tools/fill_input.js",
-      "src/content/tools/extract_data.js",
-      "src/content/tools/draft_reply.js",
-      "src/content/tools/summarize_page.js",
-      "src/content/tools/reset_form.js",
-      "src/content/content-script.js"
-    ],
-    "run_at": "document_idle"
-   }
+    {
+      "matches": ["<all_urls>"],
+      "js": [
+        "src/content/core/utils.js",
+        "src/content/core/sanitizer.js",
+        "src/content/core/registry.js",
+        "src/content/core/selector.js",
+        "src/content/core/token-budget.js",
+        "src/content/observers/navigation.js",
+        "src/content/tools/read_page.js",
+        "src/content/tools/click_element.js",
+        "src/content/tools/fill_input.js",
+        "src/content/tools/extract_data.js",
+        "src/content/tools/draft_reply.js",
+        "src/content/tools/summarize_page.js",
+        "src/content/tools/reset_form.js",
+        "src/content/content-script.js"
+      ],
+      "run_at": "document_idle"
+    }
   ],
   "icons": {
     "16": "public/icon16.png",
@@ -49,7 +43,5 @@
     "32": "public/icon32.png",
     "38": "public/icon38.png"
   },
-  "host_permissions": [
-    "<all_urls>"
-  ]
+  "host_permissions": ["<all_urls>"]
 }

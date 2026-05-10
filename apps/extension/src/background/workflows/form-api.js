@@ -16,7 +16,9 @@ CopilotSw.requestFormFillPlan = async function requestFormFillPlan(goal, forms, 
     try {
       const errorData = await response.json();
       message = errorData.error || errorData.message || message;
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     throw new Error(message);
   }
 

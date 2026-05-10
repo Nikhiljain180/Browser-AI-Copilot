@@ -1,23 +1,26 @@
 import config from '../config';
 import { getClient } from '../providers/llmClient';
 import { SYSTEM_PROMPT, FORM_FILL_SYSTEM_PROMPT } from '../prompts';
-import { delay, normalizeMessageContent, inferQueryType, isRetryableLLMError } from '../utils/helpers';
+import {
+  delay,
+  normalizeMessageContent,
+  inferQueryType,
+  isRetryableLLMError,
+} from '../utils/helpers';
 import { summarizePageContext } from '../utils/pageContext';
 import { ChatMessage, PageContext, LLMCallOptions, ConversationMessage } from '../types';
 
 export function buildConversationMessages(
   goal: string,
   pageContext: PageContext | null | undefined,
-  chatHistory: ChatMessage[] = []
+  chatHistory: ChatMessage[] = [],
 ): ConversationMessage[] {
-  const messages: ConversationMessage[] = [
-    { role: 'system', content: SYSTEM_PROMPT },
-  ];
+  const messages: ConversationMessage[] = [{ role: 'system', content: SYSTEM_PROMPT }];
 
   const queryType = inferQueryType(goal);
 
   const recentHistory = chatHistory.slice(-10);
-  recentHistory.forEach(msg => {
+  recentHistory.forEach((msg) => {
     if (msg.role !== 'tool') {
       messages.push({
         role: msg.role || 'user',
@@ -43,12 +46,12 @@ export function buildConversationMessages(
 export function buildFormFillMessages(
   goal: string,
   forms: unknown[] = [],
-  chatHistory: ChatMessage[] = []
+  chatHistory: ChatMessage[] = [],
 ): ConversationMessage[] {
   const recentHistory = chatHistory
-    .filter(message => message.role !== 'tool')
+    .filter((message) => message.role !== 'tool')
     .slice(-6)
-    .map(message => `${message.role}: ${normalizeMessageContent(message.content)}`)
+    .map((message) => `${message.role}: ${normalizeMessageContent(message.content)}`)
     .join('\n');
 
   const formInventory = JSON.stringify(forms, null, 2);
@@ -65,7 +68,7 @@ export function buildFormFillMessages(
 export async function callLLMWithTimeout(
   messages: ConversationMessage[],
   timeoutMs: number,
-  options: LLMCallOptions = {}
+  options: LLMCallOptions = {},
 ): Promise<string> {
   const provider = config.llm.provider;
   const model = config.llm.model;
@@ -86,7 +89,7 @@ export async function callLLMWithTimeout(
       if (provider === 'openai') {
         requestPromise = client.chat.completions.create({
           model,
-          messages: messages.map(m => ({ role: m.role, content: m.content })),
+          messages: messages.map((m) => ({ role: m.role, content: m.content })),
           temperature: options.temperature ?? 0.7,
           max_tokens: options.max_tokens ?? 1000,
         });
@@ -95,7 +98,7 @@ export async function callLLMWithTimeout(
           model,
           max_tokens: options.max_tokens ?? 1000,
           system: messages[0].content,
-          messages: messages.slice(1).map(m => ({ role: m.role, content: m.content })),
+          messages: messages.slice(1).map((m) => ({ role: m.role, content: m.content })),
         });
       } else {
         throw new Error(`Unsupported provider: ${provider}`);

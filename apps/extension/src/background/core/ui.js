@@ -13,7 +13,7 @@ CopilotSw.broadcastUI = function broadcastUI(message) {
 CopilotSw.updateAgentStatus = function updateAgentStatus(
   phase,
   detail,
-  isRunning = CopilotSw.agentState.isRunning
+  isRunning = CopilotSw.agentState.isRunning,
 ) {
   CopilotSw.broadcastUI({
     action: 'updateStatus',

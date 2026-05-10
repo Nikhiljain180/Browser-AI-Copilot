@@ -34,7 +34,9 @@ describe('click_element tool', () => {
   it('clicks a button element successfully', () => {
     let clicked = false;
     const btn = document.createElement('button');
-    btn.addEventListener('click', () => { clicked = true; });
+    btn.addEventListener('click', () => {
+      clicked = true;
+    });
     container.appendChild(btn);
 
     const result = clickElement(btn, 'Submit');
@@ -47,7 +49,10 @@ describe('click_element tool', () => {
     let clicked = false;
     const a = document.createElement('a');
     a.href = '#';
-    a.addEventListener('click', (e) => { e.preventDefault(); clicked = true; });
+    a.addEventListener('click', (e) => {
+      e.preventDefault();
+      clicked = true;
+    });
     container.appendChild(a);
 
     const result = clickElement(a, 'Link');

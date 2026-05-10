@@ -15,16 +15,19 @@ export function summarizePageContext(pageContext: PageContext | null | undefined
   const sectionsBudget = Math.min(6000, Math.floor(maxChars * 0.35));
   const linksBudget = Math.min(2000, Math.floor(maxChars * 0.15));
 
-  const buttonsPreview = (pageContext.buttons || [])
-    .map(button => String(button?.text || '').trim())
-    .filter(Boolean)
-    .slice(0, 12)
-    .map(text => `"${text}"`)
-    .join(', ') || 'None';
+  const buttonsPreview =
+    (pageContext.buttons || [])
+      .map((button) => String(button?.text || '').trim())
+      .filter(Boolean)
+      .slice(0, 12)
+      .map((text) => `"${text}"`)
+      .join(', ') || 'None';
 
   const linksPreviewRaw = (pageContext.links || [])
-    .map(link => {
-      const text = String(link?.text || '').trim().replace(/\s+/g, ' ');
+    .map((link) => {
+      const text = String(link?.text || '')
+        .trim()
+        .replace(/\s+/g, ' ');
       const href = String(link?.href || '').trim();
       if (!href) return null;
       return text ? `${text} (${href})` : href;
@@ -40,7 +43,7 @@ export function summarizePageContext(pageContext: PageContext | null | undefined
   const sections = Array.isArray(pageContext.sections) ? pageContext.sections : [];
   const sectionsPreviewRaw = sections
     .slice(0, 10)
-    .map(section => {
+    .map((section) => {
       const title = String(section?.title || '').trim();
       const text = String(section?.text || '').trim();
       if (!title || !text) return null;

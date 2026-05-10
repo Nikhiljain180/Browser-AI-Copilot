@@ -69,9 +69,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       if (!tabId) return { ok: true };
       try {
         await CopilotSw.ensureContentScriptInjected(tabId);
-        const pageContext = await CopilotSw.sendMessageToTab(tabId, { action: 'readPage', focusArea: null });
+        const pageContext = await CopilotSw.sendMessageToTab(tabId, {
+          action: 'readPage',
+          focusArea: null,
+        });
         CopilotSw.agentState.pageContext = pageContext;
-      } catch (_) { /* tab may be restricted or navigating */ }
+      } catch (_) {
+        /* tab may be restricted or navigating */
+      }
       return { ok: true };
     },
   };
@@ -86,7 +91,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   handler()
     .then(sendResponse)
-    .catch(err => {
+    .catch((err) => {
       console.error(`[SW] Error in ${request.action}:`, err);
       sendResponse({ error: err.message });
     });

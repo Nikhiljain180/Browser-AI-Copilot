@@ -16,12 +16,12 @@ const ContentSanitizer = {
     if (typeof DOMPurify !== 'undefined') {
       return DOMPurify.sanitize(html, {
         ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'p', 'br', 'div', 'span', 'a', 'ul', 'ol', 'li'],
-        ALLOWED_ATTR: ['href', 'target', 'rel']
+        ALLOWED_ATTR: ['href', 'target', 'rel'],
       });
     }
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = html;
-    tempDiv.querySelectorAll('script, style, iframe').forEach(el => el.remove());
+    tempDiv.querySelectorAll('script, style, iframe').forEach((el) => el.remove());
     return tempDiv.innerHTML;
-  }
+  },
 };

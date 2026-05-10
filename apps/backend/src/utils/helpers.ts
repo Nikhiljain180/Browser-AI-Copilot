@@ -1,5 +1,5 @@
 export function delay(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export function normalizeMessageContent(content: unknown): string {
@@ -7,7 +7,7 @@ export function normalizeMessageContent(content: unknown): string {
 
   if (Array.isArray(content)) {
     return content
-      .map(item => (typeof item === 'string' ? item : JSON.stringify(item)))
+      .map((item) => (typeof item === 'string' ? item : JSON.stringify(item)))
       .join('\n');
   }
 
@@ -20,14 +20,36 @@ export function inferQueryType(goal: string): 'action' | 'informational' {
   const text = String(goal || '').toLowerCase();
 
   const actionSignals = [
-    'click', 'tap', 'press', 'scroll', 'navigate', 'open', 'go to',
-    'fill', 'type', 'enter', 'submit', 'apply', 'sign in', 'login',
-    'log in', 'download', 'upload', 'extract', 'copy', 'paste',
-    'select', 'choose', 'search for', 'find and click', 'book',
-    'buy', 'purchase',
+    'click',
+    'tap',
+    'press',
+    'scroll',
+    'navigate',
+    'open',
+    'go to',
+    'fill',
+    'type',
+    'enter',
+    'submit',
+    'apply',
+    'sign in',
+    'login',
+    'log in',
+    'download',
+    'upload',
+    'extract',
+    'copy',
+    'paste',
+    'select',
+    'choose',
+    'search for',
+    'find and click',
+    'book',
+    'buy',
+    'purchase',
   ];
 
-  if (actionSignals.some(signal => text.includes(signal))) {
+  if (actionSignals.some((signal) => text.includes(signal))) {
     return 'action';
   }
 
@@ -40,10 +62,14 @@ export function isRetryableLLMError(error: any): boolean {
 
   const retryableStatuses = [408, 409, 429, 500, 502, 503, 504];
   const retryableMessages = [
-    'timeout', 'timed out', 'internal server error',
-    'overloaded', 'rate limit',
+    'timeout',
+    'timed out',
+    'internal server error',
+    'overloaded',
+    'rate limit',
   ];
 
-  return retryableStatuses.includes(status) ||
-    retryableMessages.some(msg => message.includes(msg));
+  return (
+    retryableStatuses.includes(status) || retryableMessages.some((msg) => message.includes(msg))
+  );
 }

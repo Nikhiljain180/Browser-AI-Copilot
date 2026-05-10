@@ -19,13 +19,20 @@ const FIELD_TYPE_EDIT_QUESTIONS = {
 };
 
 const SUBMIT_INTENTS = [
-  'yes', 'y', 'ok', 'okay', 'submit', 'send',
-  'proceed', 'go ahead', 'please submit', 'submit form', 'send form',
+  'yes',
+  'y',
+  'ok',
+  'okay',
+  'submit',
+  'send',
+  'proceed',
+  'go ahead',
+  'please submit',
+  'submit form',
+  'send form',
 ];
 
-const NEGATIVE_INTENTS = [
-  'no', 'nope', 'nah', 'not now', 'later', 'cancel', 'stop',
-];
+const NEGATIVE_INTENTS = ['no', 'nope', 'nah', 'not now', 'later', 'cancel', 'stop'];
 
 const NEGATIVE_PATTERNS = ["don't submit", 'do not submit'];
 
@@ -51,13 +58,19 @@ CopilotSw.askForEditField = function askForEditField(field) {
 };
 
 CopilotSw.isSubmitIntent = function isSubmitIntent(goal) {
-  const text = String(goal || '').toLowerCase().trim();
+  const text = String(goal || '')
+    .toLowerCase()
+    .trim();
   return SUBMIT_INTENTS.includes(text);
 };
 
 CopilotSw.isNegativeIntent = function isNegativeIntent(goal) {
-  const text = String(goal || '').toLowerCase().trim();
-  return NEGATIVE_INTENTS.includes(text) ||
-    NEGATIVE_PATTERNS.some(pattern => text.includes(pattern)) ||
-    /\b(don't|do not|not)\s+(submit|send|continue|proceed)\b/.test(text);
+  const text = String(goal || '')
+    .toLowerCase()
+    .trim();
+  return (
+    NEGATIVE_INTENTS.includes(text) ||
+    NEGATIVE_PATTERNS.some((pattern) => text.includes(pattern)) ||
+    /\b(don't|do not|not)\s+(submit|send|continue|proceed)\b/.test(text)
+  );
 };

@@ -5,17 +5,17 @@
 function summarizePage(options = {}) {
   try {
     const {
-      maxLength = 2000,           // max total output length
-      includeStructure = true,    // include page structure breakdown
-      includeData = true,         // include detected data (products, prices, etc.)
-      includeForms = true,        // include form state info
-      includeActions = true,      // include available actions
-      focusArea = null            // CSS selector to focus on
+      maxLength = 2000, // max total output length
+      includeStructure = true, // include page structure breakdown
+      includeData = true, // include detected data (products, prices, etc.)
+      includeForms = true, // include form state info
+      includeActions = true, // include available actions
+      focusArea = null, // CSS selector to focus on
     } = typeof options === 'number' ? { maxLength: options } : options;
 
     const root = focusArea
-      ? (document.querySelector(focusArea) || document.body)
-      : (document.querySelector('main, article, [role="main"]') || document.body);
+      ? document.querySelector(focusArea) || document.body
+      : document.querySelector('main, article, [role="main"]') || document.body;
 
     const summary = {
       success: true,
@@ -40,7 +40,7 @@ function summarizePage(options = {}) {
       actions: includeActions ? summarizeActions(root) : undefined,
 
       // ── Human-readable summary ──
-      text: ''
+      text: '',
     };
 
     // Build human-readable text summary
@@ -53,12 +53,10 @@ function summarizePage(options = {}) {
     }
 
     return summary;
-
   } catch (error) {
     return { error: error.message };
   }
 }
-
 
 // ═══════════════════════════════════════════════════
 // PAGE IDENTITY
@@ -71,7 +69,7 @@ function summarizePageIdentity() {
     domain: window.location.hostname,
     description: getMetaContent('description'),
     type: detectPageType(),
-    language: document.documentElement.lang || 'en'
+    language: document.documentElement.lang || 'en',
   };
 }
 
@@ -109,7 +107,6 @@ function detectPageType() {
   return 'general';
 }
 
-
 // ═══════════════════════════════════════════════════
 // PAGE STATE
 // ═══════════════════════════════════════════════════
@@ -120,20 +117,23 @@ function summarizePageState() {
     hasLoading: false,
     hasNotification: false,
     hasError: false,
-    scrollPosition: 'top' // 'top' | 'middle' | 'bottom'
+    scrollPosition: 'top', // 'top' | 'middle' | 'bottom'
   };
 
   // Modal
   const modal = document.querySelector(
-    '[role="dialog"]:not([aria-hidden="true"]), dialog[open], .modal.show, .modal.active'
+    '[role="dialog"]:not([aria-hidden="true"]), dialog[open], .modal.show, .modal.active',
   );
   if (modal && isElementVisible(modal)) {
     state.hasModal = true;
-    state.modalTitle = modal.querySelector('h1, h2, h3, [class*="title"]')?.innerText?.trim() || 'Unnamed dialog';
+    state.modalTitle =
+      modal.querySelector('h1, h2, h3, [class*="title"]')?.innerText?.trim() || 'Unnamed dialog';
   }
 
   // Loading
-  const loader = document.querySelector('[aria-busy="true"], .loading, .spinner, [class*="loading"]');
+  const loader = document.querySelector(
+    '[aria-busy="true"], .loading, .spinner, [class*="loading"]',
+  );
   if (loader && isElementVisible(loader)) {
     state.hasLoading = true;
   }
@@ -146,22 +146,24 @@ function summarizePageState() {
   }
 
   // Error state
-  const error = document.querySelector('.error, .alert-danger, .alert-error, [class*="error"]:not(input)');
+  const error = document.querySelector(
+    '.error, .alert-danger, .alert-error, [class*="error"]:not(input)',
+  );
   if (error && isElementVisible(error)) {
     state.hasError = true;
     state.errorText = sanitizeText(error.innerText).substring(0, 100);
   }
 
   // Scroll position
-  const scrollPercent = Math.round(
-    (window.scrollY / (document.documentElement.scrollHeight - window.innerHeight)) * 100
-  ) || 0;
+  const scrollPercent =
+    Math.round(
+      (window.scrollY / (document.documentElement.scrollHeight - window.innerHeight)) * 100,
+    ) || 0;
   state.scrollPosition = scrollPercent < 20 ? 'top' : scrollPercent > 80 ? 'bottom' : 'middle';
   state.scrollPercent = scrollPercent;
 
   return state;
 }
-
 
 // ═══════════════════════════════════════════════════
 // STRUCTURE SUMMARY
@@ -171,15 +173,15 @@ function summarizeStructure(root) {
   const structure = {
     headings: [],
     sections: [],
-    totalSections: 0
+    totalSections: 0,
   };
 
   // Heading outline
-  root.querySelectorAll('h1, h2, h3').forEach(heading => {
+  root.querySelectorAll('h1, h2, h3').forEach((heading) => {
     if (!isElementVisible(heading)) return;
     structure.headings.push({
       level: parseInt(heading.tagName[1]),
-      text: sanitizeText(heading.innerText).substring(0, 60)
+      text: sanitizeText(heading.innerText).substring(0, 60),
     });
   });
 
@@ -187,7 +189,7 @@ function summarizeStructure(root) {
   const sectionEls = root.querySelectorAll('section, article, [role="region"], .card, .panel');
   structure.totalSections = sectionEls.length;
 
-  sectionEls.forEach(section => {
+  sectionEls.forEach((section) => {
     if (!isElementVisible(section)) return;
 
     const title = getSectionTitle(section);
@@ -202,13 +204,12 @@ function summarizeStructure(root) {
       hasForm: section.querySelector('form') !== null,
       hasTable: section.querySelector('table') !== null,
       hasCards: hasRepeatingChildren(section),
-      itemCount: countRepeatingItems(section) || undefined
+      itemCount: countRepeatingItems(section) || undefined,
     });
   });
 
   return structure;
 }
-
 
 // ═══════════════════════════════════════════════════
 // DATA SUMMARY
@@ -217,22 +218,26 @@ function summarizeStructure(root) {
 function summarizeData(root) {
   const data = {
     detected: {},
-    counts: {}
+    counts: {},
   };
 
   // ── Count key elements ──
   data.counts = {
-    products: root.querySelectorAll('[data-product-id], [class*="product-card"], [class*="product-item"]').length,
-    reviews: root.querySelectorAll('[data-review-id], [class*="review-item"], [class*="review-card"]').length,
+    products: root.querySelectorAll(
+      '[data-product-id], [class*="product-card"], [class*="product-item"]',
+    ).length,
+    reviews: root.querySelectorAll(
+      '[data-review-id], [class*="review-item"], [class*="review-card"]',
+    ).length,
     orders: root.querySelectorAll('[data-order-id], table tbody tr').length,
     tickets: root.querySelectorAll('[data-ticket-id], [class*="ticket"]').length,
     images: root.querySelectorAll('img:not([src*="icon"]):not([width="1"])').length,
     links: root.querySelectorAll('a[href]').length,
-    buttons: root.querySelectorAll('button, [role="button"]').length
+    buttons: root.querySelectorAll('button, [role="button"]').length,
   };
 
   // Remove zero counts
-  Object.keys(data.counts).forEach(key => {
+  Object.keys(data.counts).forEach((key) => {
     if (data.counts[key] === 0) delete data.counts[key];
   });
 
@@ -242,15 +247,20 @@ function summarizeData(root) {
   // Prices
   const prices = pageText.match(/[$€£¥₹]\s*[\d,]+\.?\d*/g) || [];
   if (prices.length > 0) {
-    const numericPrices = prices.map(p => parseFloat(p.replace(/[^0-9.]/g, ''))).filter(n => !isNaN(n));
+    const numericPrices = prices
+      .map((p) => parseFloat(p.replace(/[^0-9.]/g, '')))
+      .filter((n) => !isNaN(n));
     data.detected.prices = {
       count: prices.length,
-      range: numericPrices.length > 0 ? {
-        min: `$${Math.min(...numericPrices).toFixed(2)}`,
-        max: `$${Math.max(...numericPrices).toFixed(2)}`,
-        total: `$${numericPrices.reduce((a, b) => a + b, 0).toFixed(2)}`
-      } : undefined,
-      samples: [...new Set(prices)].slice(0, 5)
+      range:
+        numericPrices.length > 0
+          ? {
+              min: `$${Math.min(...numericPrices).toFixed(2)}`,
+              max: `$${Math.max(...numericPrices).toFixed(2)}`,
+              total: `$${numericPrices.reduce((a, b) => a + b, 0).toFixed(2)}`,
+            }
+          : undefined,
+      samples: [...new Set(prices)].slice(0, 5),
     };
   }
 
@@ -259,18 +269,19 @@ function summarizeData(root) {
   if (ratings.length > 0) {
     data.detected.ratings = {
       count: ratings.length,
-      samples: [...new Set(ratings)].slice(0, 3)
+      samples: [...new Set(ratings)].slice(0, 3),
     };
   }
 
   // Dates
-  const dates = pageText.match(
-    /(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s*\d{2,4}|\d+\s+(?:day|week|month|hour)s?\s+ago/gi
-  ) || [];
+  const dates =
+    pageText.match(
+      /(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s*\d{2,4}|\d+\s+(?:day|week|month|hour)s?\s+ago/gi,
+    ) || [];
   if (dates.length > 0) {
     data.detected.dates = {
       count: dates.length,
-      samples: [...new Set(dates)].slice(0, 3)
+      samples: [...new Set(dates)].slice(0, 3),
     };
   }
 
@@ -279,7 +290,7 @@ function summarizeData(root) {
   if (ids.length > 0) {
     data.detected.ids = {
       count: ids.length,
-      samples: [...new Set(ids)].slice(0, 5)
+      samples: [...new Set(ids)].slice(0, 5),
     };
   }
 
@@ -288,7 +299,7 @@ function summarizeData(root) {
   if (emails.length > 0) {
     data.detected.emails = {
       count: emails.length,
-      samples: [...new Set(emails)].slice(0, 3)
+      samples: [...new Set(emails)].slice(0, 3),
     };
   }
 
@@ -296,8 +307,8 @@ function summarizeData(root) {
   const statuses = root.querySelectorAll('[class*="status"], [class*="badge"]');
   if (statuses.length > 0) {
     const statusTexts = Array.from(statuses)
-      .map(s => sanitizeText(s.innerText))
-      .filter(t => t.length > 0 && t.length < 30);
+      .map((s) => sanitizeText(s.innerText))
+      .filter((t) => t.length > 0 && t.length < 30);
     if (statusTexts.length > 0) {
       data.detected.statuses = [...new Set(statusTexts)].slice(0, 6);
     }
@@ -305,7 +316,6 @@ function summarizeData(root) {
 
   return data;
 }
-
 
 // ═══════════════════════════════════════════════════
 // FORM SUMMARY
@@ -315,11 +325,13 @@ function summarizeForms() {
   const forms = document.querySelectorAll('form');
   if (forms.length === 0) return null;
 
-  return Array.from(forms).map(form => {
-    const fields = form.querySelectorAll('input:not([type="hidden"]):not([type="submit"]), textarea, select');
-    const filledFields = Array.from(fields).filter(f => isFieldFilled(f));
-    const requiredFields = Array.from(fields).filter(f => f.required || hasRequiredIndicator(f));
-    const requiredUnfilled = requiredFields.filter(f => !isFieldFilled(f));
+  return Array.from(forms).map((form) => {
+    const fields = form.querySelectorAll(
+      'input:not([type="hidden"]):not([type="submit"]), textarea, select',
+    );
+    const filledFields = Array.from(fields).filter((f) => isFieldFilled(f));
+    const requiredFields = Array.from(fields).filter((f) => f.required || hasRequiredIndicator(f));
+    const requiredUnfilled = requiredFields.filter((f) => !isFieldFilled(f));
 
     return {
       title: getFormSectionTitle(form) || form.id || 'Unnamed form',
@@ -328,23 +340,25 @@ function summarizeForms() {
       filledFields: filledFields.length,
       requiredFields: requiredFields.length,
       requiredUnfilled: requiredUnfilled.length,
-      completionPercent: fields.length > 0
-        ? Math.round((filledFields.length / fields.length) * 100)
-        : 0,
+      completionPercent:
+        fields.length > 0 ? Math.round((filledFields.length / fields.length) * 100) : 0,
       isComplete: requiredUnfilled.length === 0,
       // List unfilled required fields (helpful for AI)
-      missingRequired: requiredUnfilled.map(f => ({
-        label: getFieldLabel(f) || f.name || f.id,
-        type: f.type || f.tagName.toLowerCase()
-      })).slice(0, 5),
+      missingRequired: requiredUnfilled
+        .map((f) => ({
+          label: getFieldLabel(f) || f.name || f.id,
+          type: f.type || f.tagName.toLowerCase(),
+        }))
+        .slice(0, 5),
       // Available submit buttons
       submitButtons: Array.from(
-        form.querySelectorAll('button[type="submit"], input[type="submit"], button:not([type])')
-      ).map(btn => sanitizeText(btn.innerText || btn.value)).filter(Boolean)
+        form.querySelectorAll('button[type="submit"], input[type="submit"], button:not([type])'),
+      )
+        .map((btn) => sanitizeText(btn.innerText || btn.value))
+        .filter(Boolean),
     };
   });
 }
-
 
 // ═══════════════════════════════════════════════════
 // ACTIONS SUMMARY
@@ -355,14 +369,14 @@ function summarizeActions(root) {
     primaryButtons: [],
     navigation: [],
     formActions: [],
-    totalClickable: 0
+    totalClickable: 0,
   };
 
   // ── Primary/prominent buttons ──
   const buttons = root.querySelectorAll('button, [role="button"], input[type="submit"]');
   actions.totalClickable = buttons.length;
 
-  buttons.forEach(btn => {
+  buttons.forEach((btn) => {
     if (!isElementVisible(btn) || isDisabled(btn)) return;
 
     const text = sanitizeText(btn.innerText || btn.value || btn.getAttribute('aria-label') || '');
@@ -375,14 +389,14 @@ function summarizeActions(root) {
       actions.primaryButtons.push({
         text: text.substring(0, 40),
         intent,
-        selector: generateSelector(btn)
+        selector: generateSelector(btn),
       });
     }
   });
 
   // ── Navigation links ──
   const navLinks = root.querySelectorAll('nav a, [role="navigation"] a, .navbar a');
-  navLinks.forEach(link => {
+  navLinks.forEach((link) => {
     if (!isElementVisible(link)) return;
     const text = sanitizeText(link.innerText);
     if (text && text.length < 30) {
@@ -394,7 +408,6 @@ function summarizeActions(root) {
   return actions;
 }
 
-
 /**
  * Detect if a button appears to be a primary/CTA button
  */
@@ -403,10 +416,9 @@ function isPrimaryButton(btn) {
   const isPrimary = /primary|cta|main|submit|action|hero/.test(classes);
   const isLarge = btn.getBoundingClientRect().width > 150;
   const hasGradient = window.getComputedStyle(btn).backgroundImage.includes('gradient');
-  
+
   return isPrimary || isLarge || hasGradient;
 }
-
 
 // ═══════════════════════════════════════════════════
 // HUMAN-READABLE SUMMARY BUILDER
@@ -435,7 +447,7 @@ function buildReadableSummary(summary) {
     const s = summary.structure;
     if (s.sections.length > 0) {
       parts.push(`📑 Sections (${s.totalSections}):`);
-      s.sections.forEach(sec => {
+      s.sections.forEach((sec) => {
         let desc = `   • ${sec.title}`;
         if (sec.hasTable) desc += ' [has table]';
         if (sec.hasForm) desc += ' [has form]';
@@ -460,7 +472,9 @@ function buildReadableSummary(summary) {
     }
 
     if (d.detected.prices) {
-      parts.push(`💰 Prices: ${d.detected.prices.count} found (${d.detected.prices.range?.min} – ${d.detected.prices.range?.max})`);
+      parts.push(
+        `💰 Prices: ${d.detected.prices.count} found (${d.detected.prices.range?.min} – ${d.detected.prices.range?.max})`,
+      );
     }
     if (d.detected.ratings) {
       parts.push(`⭐ Ratings: ${d.detected.ratings.count} found`);
@@ -473,11 +487,13 @@ function buildReadableSummary(summary) {
 
   // ── Forms ──
   if (summary.forms && summary.forms.length > 0) {
-    summary.forms.forEach(form => {
+    summary.forms.forEach((form) => {
       const status = form.isComplete ? '✅' : '📝';
-      parts.push(`${status} Form: "${form.title}" — ${form.completionPercent}% filled (${form.filledFields}/${form.totalFields} fields)`);
+      parts.push(
+        `${status} Form: "${form.title}" — ${form.completionPercent}% filled (${form.filledFields}/${form.totalFields} fields)`,
+      );
       if (form.missingRequired.length > 0) {
-        const missing = form.missingRequired.map(f => f.label).join(', ');
+        const missing = form.missingRequired.map((f) => f.label).join(', ');
         parts.push(`   ⚠️ Required but empty: ${missing}`);
       }
     });
@@ -488,7 +504,7 @@ function buildReadableSummary(summary) {
   if (summary.actions) {
     const a = summary.actions;
     if (a.primaryButtons.length > 0) {
-      const btns = a.primaryButtons.map(b => `"${b.text}"`).join(', ');
+      const btns = a.primaryButtons.map((b) => `"${b.text}"`).join(', ');
       parts.push(`🔘 Actions available: ${btns}`);
     }
     if (a.navigation.length > 0) {
@@ -498,7 +514,6 @@ function buildReadableSummary(summary) {
 
   return parts.join('\n');
 }
-
 
 // ═══════════════════════════════════════════════════
 // UTILITY (reuse from other functions)
@@ -514,7 +529,9 @@ function getSectionTitle(element) {
   const ariaLabel = element.getAttribute('aria-label');
   if (ariaLabel) return ariaLabel.trim();
 
-  const heading = element.querySelector(':scope > h1, :scope > h2, :scope > h3, :scope > .panel-title, :scope > .card-header h2');
+  const heading = element.querySelector(
+    ':scope > h1, :scope > h2, :scope > h3, :scope > .panel-title, :scope > .card-header h2',
+  );
   if (heading) return sanitizeText(heading.innerText).substring(0, 80);
 
   const prev = element.previousElementSibling;

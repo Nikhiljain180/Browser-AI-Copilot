@@ -1,6 +1,6 @@
 /**
  * Playwright E2E Test Configuration
- * 
+ *
  * Runs end-to-end tests for:
  * 1. Single-step summarization
  * 2. Multi-step workflow (read → click → extract)
@@ -17,7 +17,7 @@ module.exports = defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : 1,
   reporter: 'html',
-  
+
   use: {
     baseURL: 'file://',
     trace: 'on-first-retry',

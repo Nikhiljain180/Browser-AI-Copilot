@@ -1,6 +1,6 @@
 /**
  * Shared Utilities
- * 
+ *
  * All helper functions used across multiple tool files.
  * Loaded FIRST via manifest.json before any tool file.
  */
@@ -10,7 +10,7 @@
 // ═══════════════════════════════════════════════════
 
 function estimateTokens(text) {
-  return Math.ceil((String(text || '').length) / 4);
+  return Math.ceil(String(text || '').length / 4);
 }
 
 // ═══════════════════════════════════════════════════
@@ -55,14 +55,15 @@ function isDisabled(element) {
   if (element.getAttribute('aria-disabled') === 'true') return true;
   const style = window.getComputedStyle(element);
   if (style.pointerEvents === 'none') return true;
-  if (element.classList.contains('disabled') ||
-      element.classList.contains('is-disabled') ||
-      element.classList.contains('btn-disabled')) {
+  if (
+    element.classList.contains('disabled') ||
+    element.classList.contains('is-disabled') ||
+    element.classList.contains('btn-disabled')
+  ) {
     return true;
   }
   return false;
 }
-
 
 // ═══════════════════════════════════════════════════
 // TEXT & KEY UTILITIES
@@ -101,16 +102,18 @@ function waitForContent(selector, timeout = 3000) {
 }
 
 function normalizeDataKey(str) {
-  return String(str || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, '')
-    .trim()
-    .replace(/\s+(.)/g, (_, c) => c.toUpperCase()) || 'value';
+  return (
+    String(str || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, '')
+      .trim()
+      .replace(/\s+(.)/g, (_, c) => c.toUpperCase()) || 'value'
+  );
 }
 
 function cleanEmptyKeys(obj) {
   const cleaned = {};
-  Object.keys(obj).forEach(key => {
+  Object.keys(obj).forEach((key) => {
     const val = obj[key];
     if (val === undefined || val === null || val === '') return;
     if (Array.isArray(val) && val.length === 0) return;
@@ -142,7 +145,6 @@ function setNativeValue(element, value) {
   element.value = value;
 }
 
-
 // ═══════════════════════════════════════════════════
 // EVENT DISPATCHING
 // ═══════════════════════════════════════════════════
@@ -155,13 +157,15 @@ function fireFieldEvents(element) {
 
 function fireMouseEvent(element, eventType) {
   const rect = element.getBoundingClientRect();
-  element.dispatchEvent(new MouseEvent(eventType, {
-    bubbles: true,
-    cancelable: true,
-    view: window,
-    clientX: rect.left + rect.width / 2,
-    clientY: rect.top + rect.height / 2
-  }));
+  element.dispatchEvent(
+    new MouseEvent(eventType, {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      clientX: rect.left + rect.width / 2,
+      clientY: rect.top + rect.height / 2,
+    }),
+  );
 }
 
 // ═══════════════════════════════════════════════════
@@ -265,10 +269,10 @@ function getFieldRequiredText(field) {
 
 function getRadioGroupOptions(name) {
   const radios = document.querySelectorAll(`input[type="radio"][name="${name}"]`);
-  return Array.from(radios).map(radio => ({
+  return Array.from(radios).map((radio) => ({
     value: radio.value,
     label: getFieldLabel(radio) || radio.value,
-    checked: radio.checked
+    checked: radio.checked,
   }));
 }
 
@@ -285,7 +289,9 @@ function getSectionTitle(element) {
     const labelEl = document.getElementById(labelledBy);
     if (labelEl) return sanitizeText(labelEl.innerText);
   }
-  const heading = element.querySelector(':scope > h1, :scope > h2, :scope > h3, :scope > .panel-title, :scope > .card-header h2, :scope > .card-header');
+  const heading = element.querySelector(
+    ':scope > h1, :scope > h2, :scope > h3, :scope > .panel-title, :scope > .card-header h2, :scope > .card-header',
+  );
   if (heading) return sanitizeText(heading.innerText).substring(0, 80);
   const prev = element.previousElementSibling;
   if (prev && /^H[1-6]$/.test(prev.tagName)) {
@@ -301,7 +307,9 @@ function getParentSectionTitle(element) {
 }
 
 function getFormSectionTitle(form) {
-  const heading = form.closest('.form-section, section, article, div')?.querySelector('h1, h2, h3, legend');
+  const heading = form
+    .closest('.form-section, section, article, div')
+    ?.querySelector('h1, h2, h3, legend');
   return heading?.innerText?.trim() || form.id || '';
 }
 
@@ -312,18 +320,19 @@ function getAriaLabelledByText(element) {
   return labelEl ? sanitizeText(labelEl.innerText) : '';
 }
 
-
 // ═══════════════════════════════════════════════════
 // BUTTON CLASSIFICATION
 // ═══════════════════════════════════════════════════
 
 function classifyButtonIntent(button) {
-  const text = `${button.innerText || ''} ${button.value || ''} ${button.getAttribute('aria-label') || ''}`
-    .trim()
-    .toLowerCase();
+  const text =
+    `${button.innerText || ''} ${button.value || ''} ${button.getAttribute('aria-label') || ''}`
+      .trim()
+      .toLowerCase();
   const type = String(button.type || '').toLowerCase();
 
-  if (type === 'submit' || /\b(submit|apply|send|finish|complete|save|confirm)\b/.test(text)) return 'submit';
+  if (type === 'submit' || /\b(submit|apply|send|finish|complete|save|confirm)\b/.test(text))
+    return 'submit';
   if (/\b(next|continue|proceed)\b/.test(text)) return 'next';
   if (/\b(back|previous)\b/.test(text)) return 'back';
   if (/\b(cancel|close|decline|dismiss)\b/.test(text)) return 'cancel';
@@ -342,7 +351,6 @@ function isPrimaryButton(btn) {
   return isPrimary || isLarge || hasGradient;
 }
 
-
 // ═══════════════════════════════════════════════════
 // ELEMENT TEXT & DESCRIPTION
 // ═══════════════════════════════════════════════════
@@ -350,25 +358,26 @@ function isPrimaryButton(btn) {
 function getElementText(element) {
   return sanitizeText(
     element.innerText ||
-    element.value ||
-    element.placeholder ||
-    element.getAttribute('aria-label') ||
-    element.title ||
-    ''
+      element.value ||
+      element.placeholder ||
+      element.getAttribute('aria-label') ||
+      element.title ||
+      '',
   ).substring(0, 80);
 }
 
 function getElementDescription(element) {
-  return element.getAttribute('aria-label') ||
-         element.title ||
-         element.innerText?.substring(0, 40)?.trim() ||
-         element.value ||
-         element.placeholder ||
-         element.name ||
-         element.id ||
-         `${element.tagName.toLowerCase()}`;
+  return (
+    element.getAttribute('aria-label') ||
+    element.title ||
+    element.innerText?.substring(0, 40)?.trim() ||
+    element.value ||
+    element.placeholder ||
+    element.name ||
+    element.id ||
+    `${element.tagName.toLowerCase()}`
+  );
 }
-
 
 // ═══════════════════════════════════════════════════
 // REPEATING PATTERN DETECTION
@@ -392,10 +401,17 @@ function hasRepeatingChildren(element) {
 
 function findRepeatingItems(container) {
   const selectors = [
-    '[data-product-id]', '[data-review-id]', '[data-order-id]',
-    '[data-ticket-id]', '[data-item-id]', '[data-id]',
-    ':scope > .card', ':scope > .item', ':scope > article',
-    ':scope > div[class]', ':scope > li'
+    '[data-product-id]',
+    '[data-review-id]',
+    '[data-order-id]',
+    '[data-ticket-id]',
+    '[data-item-id]',
+    '[data-id]',
+    ':scope > .card',
+    ':scope > .item',
+    ':scope > article',
+    ':scope > div[class]',
+    ':scope > li',
   ];
   for (const selector of selectors) {
     try {
@@ -408,8 +424,13 @@ function findRepeatingItems(container) {
 
 function countRepeatingItems(section) {
   const selectors = [
-    '[data-product-id]', '[data-item-id]', '[data-id]',
-    '.card', '.item', '.product', '.review'
+    '[data-product-id]',
+    '[data-item-id]',
+    '[data-id]',
+    '.card',
+    '.item',
+    '.product',
+    '.review',
   ];
   for (const selector of selectors) {
     try {
@@ -420,7 +441,6 @@ function countRepeatingItems(section) {
   return 0;
 }
 
-
 // ═══════════════════════════════════════════════════
 // PATTERN-BASED DATA EXTRACTION
 // ═══════════════════════════════════════════════════
@@ -429,10 +449,9 @@ function extractByPatterns(element) {
   const text = element.innerText || '';
   const detected = {};
 
-  const prices = text.match(/[$€£¥₹]\s*[\d,]+\.?\d*/g) ||
-                 text.match(/[\d,]+\.?\d*\s*[$€£¥₹]/g);
+  const prices = text.match(/[$€£¥₹]\s*[\d,]+\.?\d*/g) || text.match(/[\d,]+\.?\d*\s*[$€£¥₹]/g);
   if (prices && prices.length > 0) {
-    detected.prices = [...new Set(prices.map(p => p.trim()))];
+    detected.prices = [...new Set(prices.map((p) => p.trim()))];
   }
 
   const emails = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g);
@@ -442,39 +461,44 @@ function extractByPatterns(element) {
 
   const phones = text.match(/(?:\+?\d{1,3}[\s.-]?)?\(?\d{2,4}\)?[\s.-]?\d{3,4}[\s.-]?\d{3,4}/g);
   if (phones && phones.length > 0) {
-    detected.phones = [...new Set(phones.map(p => p.trim()))];
+    detected.phones = [...new Set(phones.map((p) => p.trim()))];
   }
 
   const dates = text.match(
-    /(?:\d{1,2}[\s/.-]\d{1,2}[\s/.-]\d{2,4})|(?:\d{4}[\s/.-]\d{1,2}[\s/.-]\d{1,2})|(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s*\d{2,4})|(?:\d+\s+(?:second|minute|hour|day|week|month|year)s?\s+ago)/gi
+    /(?:\d{1,2}[\s/.-]\d{1,2}[\s/.-]\d{2,4})|(?:\d{4}[\s/.-]\d{1,2}[\s/.-]\d{1,2})|(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s*\d{2,4})|(?:\d+\s+(?:second|minute|hour|day|week|month|year)s?\s+ago)/gi,
   );
   if (dates && dates.length > 0) {
-    detected.dates = [...new Set(dates.map(d => d.trim()))];
+    detected.dates = [...new Set(dates.map((d) => d.trim()))];
   }
 
-  const quantities = text.match(/\d+[\s]*(?:left|items?|reviews?|units?|in stock|available|remaining|sold|orders?)/gi);
+  const quantities = text.match(
+    /\d+[\s]*(?:left|items?|reviews?|units?|in stock|available|remaining|sold|orders?)/gi,
+  );
   if (quantities && quantities.length > 0) {
-    detected.quantities = [...new Set(quantities.map(q => q.trim()))];
+    detected.quantities = [...new Set(quantities.map((q) => q.trim()))];
   }
 
-  const ratings = text.match(/(?:[\d.]+\s*[★⭐])|(?:[★⭐☆]{2,})|(?:[\d.]+\s*(?:\/\s*5|out of\s*5))/gi);
+  const ratings = text.match(
+    /(?:[\d.]+\s*[★⭐])|(?:[★⭐☆]{2,})|(?:[\d.]+\s*(?:\/\s*5|out of\s*5))/gi,
+  );
   if (ratings && ratings.length > 0) {
-    detected.ratings = [...new Set(ratings.map(r => r.trim()))];
+    detected.ratings = [...new Set(ratings.map((r) => r.trim()))];
   }
 
   const percentages = text.match(/[\d.]+\s*%/g);
   if (percentages && percentages.length > 0) {
-    detected.percentages = [...new Set(percentages.map(p => p.trim()))];
+    detected.percentages = [...new Set(percentages.map((p) => p.trim()))];
   }
 
-  const ids = text.match(/(?:[A-Z]{2,5}[-_]\d{3,}[-_]?\d*)|(?:(?:SKU|ID|Ref|Order|Ticket)[:\s]*[A-Z0-9-]+)/gi);
+  const ids = text.match(
+    /(?:[A-Z]{2,5}[-_]\d{3,}[-_]?\d*)|(?:(?:SKU|ID|Ref|Order|Ticket)[:\s]*[A-Z0-9-]+)/gi,
+  );
   if (ids && ids.length > 0) {
-    detected.ids = [...new Set(ids.map(id => id.trim()))];
+    detected.ids = [...new Set(ids.map((id) => id.trim()))];
   }
 
   return detected;
 }
-
 
 // ═══════════════════════════════════════════════════
 // ACTION EXTRACTION
@@ -483,24 +507,25 @@ function extractByPatterns(element) {
 function extractActions(element) {
   const actions = [];
   const links = element.querySelectorAll('a[href]');
-  links.forEach(link => {
+  links.forEach((link) => {
     actions.push({
       type: 'link',
       text: sanitizeText(link.innerText || link.getAttribute('aria-label') || 'Link'),
-      href: link.href
+      href: link.href,
     });
   });
-  const buttons = element.querySelectorAll('button, [role="button"], input[type="button"], input[type="submit"]');
-  buttons.forEach(btn => {
+  const buttons = element.querySelectorAll(
+    'button, [role="button"], input[type="button"], input[type="submit"]',
+  );
+  buttons.forEach((btn) => {
     actions.push({
       type: 'button',
       text: sanitizeText(btn.innerText || btn.value || btn.getAttribute('aria-label') || 'Button'),
-      selector: generateSelector(btn)
+      selector: generateSelector(btn),
     });
   });
   return actions;
 }
-
 
 // ═══════════════════════════════════════════════════
 // META & PAGE HELPERS
@@ -510,7 +535,6 @@ function getMetaContent(name) {
   const meta = document.querySelector(`meta[name="${name}"], meta[property="og:${name}"]`);
   return meta?.content || '';
 }
-
 
 // ═══════════════════════════════════════════════════
 // PARSE HELPERS
@@ -535,7 +559,6 @@ function parseTimeString(value) {
   }
   return value;
 }
-
 
 // ═══════════════════════════════════════════════════
 // DRAFT REPLY HELPERS

@@ -44,16 +44,43 @@ class ContentSanitizer {
     // Use DOMPurify if available
     if (DOMPurifyLib) {
       return DOMPurifyLib.sanitize(html, {
-        ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'p', 'br', 'div', 'span', 'a', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'table', 'thead', 'tbody', 'tr', 'td', 'th'],
-        ALLOWED_ATTR: ['href', 'target', 'rel']
+        ALLOWED_TAGS: [
+          'b',
+          'i',
+          'em',
+          'strong',
+          'p',
+          'br',
+          'div',
+          'span',
+          'a',
+          'ul',
+          'ol',
+          'li',
+          'h1',
+          'h2',
+          'h3',
+          'h4',
+          'h5',
+          'h6',
+          'table',
+          'thead',
+          'tbody',
+          'tr',
+          'td',
+          'th',
+        ],
+        ALLOWED_ATTR: ['href', 'target', 'rel'],
       });
     }
 
     // Fallback: manually strip dangerous elements
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = html;
-    const dangerous = tempDiv.querySelectorAll('script, style, iframe, object, embed, [onclick], [onerror], [onload]');
-    dangerous.forEach(el => el.remove());
+    const dangerous = tempDiv.querySelectorAll(
+      'script, style, iframe, object, embed, [onclick], [onerror], [onload]',
+    );
+    dangerous.forEach((el) => el.remove());
     return tempDiv.innerHTML;
   }
 
@@ -67,7 +94,7 @@ class ContentSanitizer {
     }
 
     if (Array.isArray(obj)) {
-      return obj.map(item => this.sanitizeJSON(item));
+      return obj.map((item) => this.sanitizeJSON(item));
     }
 
     const sanitized = {};

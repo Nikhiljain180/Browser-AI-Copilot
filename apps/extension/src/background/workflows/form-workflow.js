@@ -7,24 +7,32 @@
 async function fillOneField(tabId, field, value) {
   if (!field || !value) return null;
 
-  return CopilotSw.executeTool('fill_input', {
-    agent_id: field.agentId,
-    selector: field.selector,
-    value,
-  }, tabId);
+  return CopilotSw.executeTool(
+    'fill_input',
+    {
+      agent_id: field.agentId,
+      selector: field.selector,
+      value,
+    },
+    tabId,
+  );
 }
 
 async function clearFieldsInForm(formsInventory, tabId) {
-  const allFields = (formsInventory || []).flatMap(form => form?.fields || []);
+  const allFields = (formsInventory || []).flatMap((form) => form?.fields || []);
 
   for (const field of allFields) {
     if (!field || !field.selector || CopilotSw.isFileUploadField(field)) continue;
 
-    await CopilotSw.executeTool('fill_input', {
-      agent_id: field.agentId,
-      selector: field.selector,
-      value: '',
-    }, tabId);
+    await CopilotSw.executeTool(
+      'fill_input',
+      {
+        agent_id: field.agentId,
+        selector: field.selector,
+        value: '',
+      },
+      tabId,
+    );
   }
 }
 
@@ -34,16 +42,22 @@ async function clearFieldsInForm(formsInventory, tabId) {
 
 async function handleClearFlow(pageContext, formsInventory, tabId) {
   const clearButtons = Array.isArray(pageContext?.buttons)
-    ? pageContext.buttons.filter(btn => /\b(clear|reset|cancel|start over|wipe|empty)\b/i.test(String(btn.text || '')))
+    ? pageContext.buttons.filter((btn) =>
+        /\b(clear|reset|cancel|start over|wipe|empty)\b/i.test(String(btn.text || '')),
+      )
     : [];
 
   if (clearButtons.length > 0) {
     const clearBtn = clearButtons[0];
-    const result = await CopilotSw.executeTool('click_element', {
-      agent_id: clearBtn.agentId,
-      selector: clearBtn.selector,
-      description: clearBtn.text || 'Clear form',
-    }, tabId);
+    const result = await CopilotSw.executeTool(
+      'click_element',
+      {
+        agent_id: clearBtn.agentId,
+        selector: clearBtn.selector,
+        description: clearBtn.text || 'Clear form',
+      },
+      tabId,
+    );
 
     if (!result?.error) {
       CopilotSw.clearFormSession();
@@ -102,7 +116,9 @@ async function handleEditFlow(goal, formsInventory, tabId) {
   session.filledFields = session.filledFields || {};
   session.filledFields[CopilotSw.fieldKey(editField)] = newValue;
   session.pendingFields = Array.isArray(session.pendingFields)
-    ? session.pendingFields.filter(item => CopilotSw.fieldKey(item) !== CopilotSw.fieldKey(editField))
+    ? session.pendingFields.filter(
+        (item) => CopilotSw.fieldKey(item) !== CopilotSw.fieldKey(editField),
+      )
     : [];
   session.editMode = false;
   session.editField = null;
@@ -129,7 +145,10 @@ async function handleEditFlow(goal, formsInventory, tabId) {
 }
 
 async function handleSubmitConfirmation(goal, pageContext, session, tabId) {
-  if (CopilotSw.isSubmitIntent(goal) || CopilotSw.isFormSubmitGoal(String(goal || '').toLowerCase())) {
+  if (
+    CopilotSw.isSubmitIntent(goal) ||
+    CopilotSw.isFormSubmitGoal(String(goal || '').toLowerCase())
+  ) {
     const submitButton = CopilotSw.resolveSubmitButton(pageContext, null, session);
 
     if (!submitButton?.selector && !submitButton?.agentId) {
@@ -137,11 +156,15 @@ async function handleSubmitConfirmation(goal, pageContext, session, tabId) {
     }
 
     CopilotSw.updateAgentStatus('acting', 'Waiting for approval before submitting the form.', true);
-    const submitResult = await CopilotSw.executeToolWithApproval('click_element', {
-      agent_id: submitButton.agentId,
-      selector: submitButton.selector,
-      description: submitButton.text || 'Submit form',
-    }, tabId);
+    const submitResult = await CopilotSw.executeToolWithApproval(
+      'click_element',
+      {
+        agent_id: submitButton.agentId,
+        selector: submitButton.selector,
+        description: submitButton.text || 'Submit form',
+      },
+      tabId,
+    );
 
     if (submitResult?.error) {
       return submitResult.error.includes('cancel')
@@ -164,7 +187,11 @@ async function handleSubmitConfirmation(goal, pageContext, session, tabId) {
 }
 
 async function handleExplicitSubmit(goal, pageContext, formsInventory, session, tabId) {
-  const plan = await CopilotSw.requestFormFillPlan(goal, formsInventory, CopilotSw.agentState.chatHistory);
+  const plan = await CopilotSw.requestFormFillPlan(
+    goal,
+    formsInventory,
+    CopilotSw.agentState.chatHistory,
+  );
   const workflowPlan = CopilotSw.validateFormWorkflowPlan(plan, formsInventory);
 
   if (workflowPlan.missingFields.length > 0) {
@@ -178,7 +205,7 @@ async function handleExplicitSubmit(goal, pageContext, formsInventory, session, 
     });
     await CopilotSw.agentState.save();
 
-    const questions = workflowPlan.missingFields.map(item => `- ${CopilotSw.askForField(item)}`);
+    const questions = workflowPlan.missingFields.map((item) => `- ${CopilotSw.askForField(item)}`);
 
     return ['I found the form, but I still need a few details:', ...questions].join('\n');
   }
@@ -189,11 +216,15 @@ async function handleExplicitSubmit(goal, pageContext, formsInventory, session, 
   }
 
   CopilotSw.updateAgentStatus('acting', 'Waiting for approval before submitting the form.', true);
-  const submitResult = await CopilotSw.executeToolWithApproval('click_element', {
-    agent_id: submitButton.agentId,
-    selector: submitButton.selector,
-    description: submitButton.text || 'Submit form',
-  }, tabId);
+  const submitResult = await CopilotSw.executeToolWithApproval(
+    'click_element',
+    {
+      agent_id: submitButton.agentId,
+      selector: submitButton.selector,
+      description: submitButton.text || 'Submit form',
+    },
+    tabId,
+  );
 
   if (submitResult?.error) {
     return submitResult.error.includes('cancel')
@@ -209,37 +240,47 @@ async function handleFreshFormFill(goal, pageContext, formsInventory, session, t
   const normalizedGoal = String(goal || '').toLowerCase();
   const wantsSubmit = CopilotSw.isFormSubmitGoal(normalizedGoal);
 
-  const plan = await CopilotSw.requestFormFillPlan(goal, formsInventory, CopilotSw.agentState.chatHistory);
+  const plan = await CopilotSw.requestFormFillPlan(
+    goal,
+    formsInventory,
+    CopilotSw.agentState.chatHistory,
+  );
   const workflowPlan = CopilotSw.validateFormWorkflowPlan(plan, formsInventory);
   const responseLines = [];
   let didFillAny = false;
 
-  const allFields = (formsInventory || []).flatMap(form => form?.fields || []);
+  const allFields = (formsInventory || []).flatMap((form) => form?.fields || []);
   const fallbackMissingFields = allFields
-    .filter(field => field && field.visible !== false && !field.disabled)
-    .filter(field => !CopilotSw.isFileUploadField(field))
-    .filter(field => {
+    .filter((field) => field && field.visible !== false && !field.disabled)
+    .filter((field) => !CopilotSw.isFileUploadField(field))
+    .filter((field) => {
       // Don't treat placeholder text (especially for <select>) as "filled".
       // The inventory already provides an isFilled boolean that handles selects correctly.
       return field.isFilled !== true;
     })
-    .map(field => CopilotSw.normalizeFieldRef({
-      agentId: field.agentId,
-      selector: field.selector,
-      label: field.label || field.name || field.placeholder || field.selector,
-      type: field.type,
-    }));
+    .map((field) =>
+      CopilotSw.normalizeFieldRef({
+        agentId: field.agentId,
+        selector: field.selector,
+        label: field.label || field.name || field.placeholder || field.selector,
+        type: field.type,
+      }),
+    );
 
   // ── Fill fields from plan ──
   if (workflowPlan.fields.length > 0) {
     const filledFields = [];
 
     for (const fieldPlan of workflowPlan.fields) {
-      const result = await CopilotSw.executeTool('fill_input', {
-        agent_id: fieldPlan.agentId,
-        selector: fieldPlan.selector,
-        value: fieldPlan.value,
-      }, tabId);
+      const result = await CopilotSw.executeTool(
+        'fill_input',
+        {
+          agent_id: fieldPlan.agentId,
+          selector: fieldPlan.selector,
+          value: fieldPlan.value,
+        },
+        tabId,
+      );
 
       if (result?.error) continue;
 
@@ -255,10 +296,12 @@ async function handleFreshFormFill(goal, pageContext, formsInventory, session, t
     }
 
     if (filledFields.length > 0) {
-      responseLines.push([
-        workflowPlan.summary || 'Filled the form with the information provided:',
-        ...filledFields.map(item => `- ${item.field}: ${item.value}`),
-      ].join('\n'));
+      responseLines.push(
+        [
+          workflowPlan.summary || 'Filled the form with the information provided:',
+          ...filledFields.map((item) => `- ${item.field}: ${item.value}`),
+        ].join('\n'),
+      );
     }
   }
 
@@ -269,12 +312,13 @@ async function handleFreshFormFill(goal, pageContext, formsInventory, session, t
     !/@/.test(String(goal || '')) &&
     !/\b\d{2,}\b/.test(String(goal || ''));
 
-  const missingFieldsToAsk =
-    isNoDataFillRequest
-      ? fallbackMissingFields
-      : (workflowPlan.missingFields.length > 0
-        ? workflowPlan.missingFields
-        : (workflowPlan.nextAction === 'ask_user' ? fallbackMissingFields : []));
+  const missingFieldsToAsk = isNoDataFillRequest
+    ? fallbackMissingFields
+    : workflowPlan.missingFields.length > 0
+      ? workflowPlan.missingFields
+      : workflowPlan.nextAction === 'ask_user'
+        ? fallbackMissingFields
+        : [];
 
   if (missingFieldsToAsk.length > 0 || workflowPlan.nextAction === 'ask_user') {
     CopilotSw.setFormSession(missingFieldsToAsk, true, {
@@ -287,9 +331,10 @@ async function handleFreshFormFill(goal, pageContext, formsInventory, session, t
     });
     await CopilotSw.agentState.save();
 
-    const questions = missingFieldsToAsk.length > 0
-      ? missingFieldsToAsk.map(item => `- ${CopilotSw.askForField(item)}`)
-      : [];
+    const questions =
+      missingFieldsToAsk.length > 0
+        ? missingFieldsToAsk.map((item) => `- ${CopilotSw.askForField(item)}`)
+        : [];
 
     if (workflowPlan.summary) responseLines.push(workflowPlan.summary);
     if (questions.length > 0) {
@@ -311,25 +356,34 @@ async function handleFreshFormFill(goal, pageContext, formsInventory, session, t
   if (workflowPlan.nextAction === 'continue' && workflowPlan.targetButton) {
     const buttonText = String(workflowPlan.targetButton.text || '').toLowerCase();
     const buttonIntent = String(workflowPlan.targetButton.intent || '').toLowerCase();
-    const looksLikeSubmit = buttonIntent === 'submit' ||
-      /\b(submit|apply|send|finish|complete|post)\b/.test(buttonText);
+    const looksLikeSubmit =
+      buttonIntent === 'submit' || /\b(submit|apply|send|finish|complete|post)\b/.test(buttonText);
 
     if (looksLikeSubmit && !wantsSubmit) {
-      responseLines.push('I filled the fields. Say "yes" or "submit" if you want me to submit the form.');
+      responseLines.push(
+        'I filled the fields. Say "yes" or "submit" if you want me to submit the form.',
+      );
     } else {
       const clickFn = looksLikeSubmit ? CopilotSw.executeToolWithApproval : CopilotSw.executeTool;
-      const continueResult = await clickFn('click_element', {
-        agent_id: workflowPlan.targetButton.agentId,
-        selector: workflowPlan.targetButton.selector,
-        description: workflowPlan.targetButton.text || 'Continue',
-      }, tabId);
+      const continueResult = await clickFn(
+        'click_element',
+        {
+          agent_id: workflowPlan.targetButton.agentId,
+          selector: workflowPlan.targetButton.selector,
+          description: workflowPlan.targetButton.text || 'Continue',
+        },
+        tabId,
+      );
 
       if (continueResult?.error) {
         return [...responseLines, `I could not continue to the next step: ${continueResult.error}`]
-          .filter(Boolean).join('\n\n');
+          .filter(Boolean)
+          .join('\n\n');
       }
 
-      responseLines.push(`Moved to the next step using "${workflowPlan.targetButton.text || 'Continue'}".`);
+      responseLines.push(
+        `Moved to the next step using "${workflowPlan.targetButton.text || 'Continue'}".`,
+      );
     }
   }
 
@@ -338,21 +392,30 @@ async function handleFreshFormFill(goal, pageContext, formsInventory, session, t
     const submitButton = CopilotSw.resolveSubmitButton(pageContext, workflowPlan, session);
     if (!submitButton?.selector && !submitButton?.agentId) {
       return [...responseLines, 'I could not find a submit button for this form.']
-        .filter(Boolean).join('\n\n');
+        .filter(Boolean)
+        .join('\n\n');
     }
 
     CopilotSw.updateAgentStatus('acting', 'Waiting for approval before submitting the form.', true);
-    const submitResult = await CopilotSw.executeToolWithApproval('click_element', {
-      agent_id: submitButton.agentId,
-      selector: submitButton.selector,
-      description: submitButton.text || 'Submit form',
-    }, tabId);
+    const submitResult = await CopilotSw.executeToolWithApproval(
+      'click_element',
+      {
+        agent_id: submitButton.agentId,
+        selector: submitButton.selector,
+        description: submitButton.text || 'Submit form',
+      },
+      tabId,
+    );
 
     if (submitResult?.error) {
-      return [...responseLines, submitResult.error.includes('cancel')
-        ? 'Submission was cancelled.'
-        : `I could not submit the form: ${submitResult.error}`
-      ].filter(Boolean).join('\n\n');
+      return [
+        ...responseLines,
+        submitResult.error.includes('cancel')
+          ? 'Submission was cancelled.'
+          : `I could not submit the form: ${submitResult.error}`,
+      ]
+        .filter(Boolean)
+        .join('\n\n');
     }
 
     CopilotSw.clearFormSession();
@@ -363,7 +426,10 @@ async function handleFreshFormFill(goal, pageContext, formsInventory, session, t
     session.submitButtons = workflowPlan.submitButtons || [];
     session.targetButton = workflowPlan.targetButton || null;
     responseLines.push('Say "yes" or "submit" if you want me to submit the form.');
-  } else if (!wantsSubmit && (workflowPlan.nextAction === 'fill_only' || workflowPlan.nextAction === 'done')) {
+  } else if (
+    !wantsSubmit &&
+    (workflowPlan.nextAction === 'fill_only' || workflowPlan.nextAction === 'done')
+  ) {
     // Ensure a clear success message when the form is fully filled and no submit was requested.
     CopilotSw.clearFormSession();
     responseLines.push('Done. The form fields are filled.');
@@ -372,7 +438,7 @@ async function handleFreshFormFill(goal, pageContext, formsInventory, session, t
   // If we filled something and there is nothing left to ask/click/submit, always emit a completion message.
   if (!hasFurtherStep && didFillAny && !session?.awaitingSubmitConfirmation) {
     CopilotSw.clearFormSession();
-    if (!responseLines.some(line => /done\./i.test(String(line)))) {
+    if (!responseLines.some((line) => /done\./i.test(String(line)))) {
       responseLines.push('Done. The form fields are filled.');
     }
   }

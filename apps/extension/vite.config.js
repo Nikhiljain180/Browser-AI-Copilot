@@ -13,11 +13,11 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
   },
-  
+
   build: {
     outDir: './public/dist',
     emptyOutDir: false, // Preserve manifest.json, icons
-    
+
     rollupOptions: {
       input: {
         popup: path.resolve(__dirname, 'src/ui/popup.js'),

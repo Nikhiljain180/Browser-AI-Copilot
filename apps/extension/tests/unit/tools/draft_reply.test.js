@@ -2,12 +2,11 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 // Replicate buildFallbackDraftReply and draftReply logic from draft_reply.js
 function buildFallbackDraftReply(context, tone) {
-  const safeContext = String(context || '').trim().replace(/\s+/g, ' ').slice(0, 280);
-  const opener = tone === 'casual'
-    ? 'Hey —'
-    : tone === 'formal'
-      ? 'Hello,'
-      : 'Hi,';
+  const safeContext = String(context || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .slice(0, 280);
+  const opener = tone === 'casual' ? 'Hey —' : tone === 'formal' ? 'Hello,' : 'Hi,';
 
   if (!safeContext) {
     return `${opener}\n\nThanks for reaching out. Happy to help.\n`;

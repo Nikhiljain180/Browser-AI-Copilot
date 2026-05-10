@@ -1,0 +1,9 @@
+node_modules
+dist
+build
+public/dist
+coverage
+test-results
+playwright-report
+*.log
+.nyc_output

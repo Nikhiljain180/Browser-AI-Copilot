@@ -25,14 +25,15 @@ function getStructuredRowsFromContext(lastContent, pageContext) {
     return [];
   }
 
-  return table.rows.map(row => {
+  return table.rows.map((row) => {
     const record = {};
     table.headers.forEach((header, index) => {
-      const key = String(header || `col_${index}`)
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '_')
-        .replace(/^_+|_+$/g, '') || `col_${index}`;
+      const key =
+        String(header || `col_${index}`)
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '_')
+          .replace(/^_+|_+$/g, '') || `col_${index}`;
       record[key] = row[index] ?? '';
     });
     return record;
@@ -42,7 +43,7 @@ function getStructuredRowsFromContext(lastContent, pageContext) {
 function getLastToolContent(chatHistory) {
   const lastToolMessage = [...chatHistory]
     .reverse()
-    .find(message => message.role === 'tool' && message.content);
+    .find((message) => message.role === 'tool' && message.content);
   return lastToolMessage?.content || null;
 }
 
@@ -55,7 +56,11 @@ function formatExtractionAnswer(lastContent, pageContext) {
 }
 
 function formatSummaryAnswer(lastContent, goal) {
-  if (!lastContent?.success || typeof lastContent.summary !== 'string' || !lastContent.summary.trim()) {
+  if (
+    !lastContent?.success ||
+    typeof lastContent.summary !== 'string' ||
+    !lastContent.summary.trim()
+  ) {
     return null;
   }
 
@@ -65,12 +70,12 @@ function formatSummaryAnswer(lastContent, goal) {
   if (lowerGoal.includes('bullet')) {
     const items = summaryText
       .split(/[\n.;]+/)
-      .map(item => item.trim())
+      .map((item) => item.trim())
       .filter(Boolean)
       .slice(0, 5);
 
     if (items.length > 0) {
-      return items.map(item => `- ${item}`).join('\n');
+      return items.map((item) => `- ${item}`).join('\n');
     }
   }
 
@@ -82,17 +87,18 @@ function formatDataPreviewAnswer(lastContent) {
     return null;
   }
 
-  const preview = lastContent.data.slice(0, 5).map(item => {
+  const preview = lastContent.data.slice(0, 5).map((item) => {
     return typeof item === 'string' ? item : JSON.stringify(item);
   });
-  return preview.map(item => `- ${item}`).join('\n');
+  return preview.map((item) => `- ${item}`).join('\n');
 }
 
 function formatPageFallbackAnswer(pageContext) {
   const title = pageContext?.title ? `Page: ${pageContext.title}` : null;
-  const text = typeof pageContext?.textContent === 'string'
-    ? pageContext.textContent.trim().replace(/\s+/g, ' ').slice(0, 280)
-    : '';
+  const text =
+    typeof pageContext?.textContent === 'string'
+      ? pageContext.textContent.trim().replace(/\s+/g, ' ').slice(0, 280)
+      : '';
 
   const parts = [title, text].filter(Boolean);
   return parts.join('\n\n') || 'I could not complete the request.';
@@ -186,7 +192,7 @@ async function runAgentLoop(goal, tabId) {
     const llmResponse = await CopilotSw.callLLM(
       goal,
       CopilotSw.agentState.pageContext,
-      CopilotSw.agentState.chatHistory
+      CopilotSw.agentState.chatHistory,
     );
 
     if (!CopilotSw.agentState.isRunning) break;
@@ -220,7 +226,7 @@ async function runAgentLoop(goal, tabId) {
     const toolResult = await CopilotSw.executeToolWithApproval(
       llmResponse.action,
       llmResponse.action_input,
-      tabId
+      tabId,
     );
 
     if (!CopilotSw.agentState.isRunning) break;
@@ -267,7 +273,7 @@ async function runAgentLoop(goal, tabId) {
     const fallbackAnswer = formatFallbackAnswer(
       goal,
       CopilotSw.agentState.pageContext,
-      CopilotSw.agentState.chatHistory
+      CopilotSw.agentState.chatHistory,
     );
 
     CopilotSw.agentState.chatHistory.push({
@@ -332,8 +338,12 @@ CopilotSw.handleStartAgent = async function handleStartAgent(goal) {
     CopilotSw.agentState.iterationCount = 0;
     await CopilotSw.agentState.save();
 
-      // ── Read current page ──
-    CopilotSw.updateAgentStatus('reading', 'Collecting the current page context before starting.', true);
+    // ── Read current page ──
+    CopilotSw.updateAgentStatus(
+      'reading',
+      'Collecting the current page context before starting.',
+      true,
+    );
 
     const tab = await CopilotSw.getUsableTab();
 

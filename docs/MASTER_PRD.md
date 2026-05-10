@@ -7,6 +7,7 @@ A browser-based AI copilot that understands webpages and acts on them — fillin
 ## Core Capabilities
 
 ### Form Automation
+
 - Detect all forms and standalone inputs on a page
 - Fill fields intelligently using user-provided or LLM-inferred values
 - Ask targeted follow-up questions for missing required fields
@@ -17,18 +18,21 @@ A browser-based AI copilot that understands webpages and acts on them — fillin
 - Clear/reset forms
 
 ### Data Extraction
+
 - Extract structured data from tables, cards, lists, and repeating items
 - Preserve record-level relationships (name, rating, price, etc. per item)
 - Extract key-value pairs and heading-anchored content
 - Pattern-based extraction for unstructured content
 
 ### Content Interaction
+
 - Draft and insert replies in textareas, rich-text editors, and iframe-based editors
 - Summarize page content with structured output
 - Click buttons, links, and interactive elements with full event simulation
 - Navigate SPAs by detecting client-side route changes
 
 ### Agent Architecture
+
 - ReAct-style reasoning loop: read page → reason → act → re-read
 - Specialized form workflow bypasses generic loop for structured tasks
 - Human-in-the-loop approval gating for risky actions (submit, delete, confirm)

@@ -11,7 +11,7 @@ module.exports = {
     'apps/extension/src/**/*.vue',
     '!**/node_modules/**',
   ],
-  
+
   transform: {
     '^.+\\.vue$': '@vue/vue3-jest',
     '.+\\.(css|styl|less|sass|scss|svg|png|jpg|ttf|woff|woff2)$': 'jest-transform-stub',
@@ -19,11 +19,8 @@ module.exports = {
   },
 
   moduleFileExtensions: ['vue', 'js', 'json'],
-  
-  testPathIgnorePatterns: [
-    '/node_modules/',
-    '/dist/',
-  ],
+
+  testPathIgnorePatterns: ['/node_modules/', '/dist/'],
 
   setupFiles: ['./tests/setup.js'],
 };

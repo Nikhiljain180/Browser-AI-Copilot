@@ -5,16 +5,38 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ACTION_SIGNALS = [
-  'click', 'tap', 'press', 'scroll', 'navigate', 'open', 'go to',
-  'fill', 'type', 'enter', 'submit', 'apply', 'sign in', 'login',
-  'log in', 'download', 'upload', 'extract', 'copy', 'paste',
-  'select', 'choose', 'search for', 'find and click',
-  'book', 'buy', 'purchase',
+  'click',
+  'tap',
+  'press',
+  'scroll',
+  'navigate',
+  'open',
+  'go to',
+  'fill',
+  'type',
+  'enter',
+  'submit',
+  'apply',
+  'sign in',
+  'login',
+  'log in',
+  'download',
+  'upload',
+  'extract',
+  'copy',
+  'paste',
+  'select',
+  'choose',
+  'search for',
+  'find and click',
+  'book',
+  'buy',
+  'purchase',
 ];
 
 function inferQueryType(goal) {
   const text = String(goal || '').toLowerCase();
-  return ACTION_SIGNALS.some(signal => text.includes(signal)) ? 'action' : 'informational';
+  return ACTION_SIGNALS.some((signal) => text.includes(signal)) ? 'action' : 'informational';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -26,7 +48,7 @@ function tokenize(text) {
     .toLowerCase()
     .replace(/[^a-z0-9\s]+/g, ' ')
     .split(/\s+/)
-    .filter(token => token.length >= 3);
+    .filter((token) => token.length >= 3);
 }
 
 function scoreSection(section, goalTokens) {
@@ -49,11 +71,11 @@ function pickRelevantSections(goal, pageContext, maxSections = 6) {
   }
 
   return [...sections]
-    .map(section => ({ section, score: scoreSection(section, goalTokens) }))
+    .map((section) => ({ section, score: scoreSection(section, goalTokens) }))
     .sort((a, b) => b.score - a.score)
-    .filter(entry => entry.score > 0)
+    .filter((entry) => entry.score > 0)
     .slice(0, maxSections)
-    .map(entry => entry.section);
+    .map((entry) => entry.section);
 }
 
 function clampText(text, maxChars) {
@@ -74,7 +96,7 @@ function buildFocusedPageContext(goal, pageContext) {
 
   // ── Build sections text ──
   const stitchedText = focusedSections
-    .map(section => {
+    .map((section) => {
       const title = String(section?.title || '').trim();
       const text = String(section?.text || '').trim();
       return title ? `${title}\n${text}` : text;
@@ -85,43 +107,56 @@ function buildFocusedPageContext(goal, pageContext) {
   // ── Build tables text ──
   let tablesText = '';
   if (Array.isArray(pageContext.tables) && pageContext.tables.length > 0) {
-    tablesText = pageContext.tables.map(table => {
-      const title = table.title ? `Table: ${table.title}` : 'Table';
-      const headers = table.headers || [];
-      
-      const rowsText = (table.rows || []).map(row => {
-        if (row.data && typeof row.data === 'object') {
-          return Object.entries(row.data)
-            .filter(([key]) => !key.startsWith('_'))  // skip internal keys
-            .map(([key, value]) => `${key}: ${value}`)
-            .join(' | ');
-        }
-        return '';
-      }).filter(Boolean).join('\n');
+    tablesText = pageContext.tables
+      .map((table) => {
+        const title = table.title ? `Table: ${table.title}` : 'Table';
+        const headers = table.headers || [];
 
-      // Include insights if available
-      let insightsText = '';
-      if (table.insights) {
-        const insights = [];
-        if (table.insights.mostReviewed) {
-          insights.push(`Most reviewed: ${table.insights.mostReviewed['PRODUCT NAME'] || table.insights.mostReviewed[headers[1]] || 'N/A'} (${table.insights.mostReviewed._reviewCount} reviews)`);
-        }
-        if (table.insights.topRated) {
-          insights.push(`Top rated: ${table.insights.topRated['PRODUCT NAME'] || table.insights.topRated[headers[1]] || 'N/A'} (${table.insights.topRated._ratingScore} stars)`);
-        }
-        if (table.insights.highestPrice) {
-          insights.push(`Highest price: ${table.insights.highestPrice['PRODUCT NAME'] || table.insights.highestPrice[headers[1]] || 'N/A'} (${table.insights.highestPrice['PRICE'] || ''})`);
-        }
-        if (table.insights.lowestPrice) {
-          insights.push(`Lowest price: ${table.insights.lowestPrice['PRODUCT NAME'] || table.insights.lowestPrice[headers[1]] || 'N/A'} (${table.insights.lowestPrice['PRICE'] || ''})`);
-        }
-        if (insights.length > 0) {
-          insightsText = '\nInsights: ' + insights.join(' | ');
-        }
-      }
+        const rowsText = (table.rows || [])
+          .map((row) => {
+            if (row.data && typeof row.data === 'object') {
+              return Object.entries(row.data)
+                .filter(([key]) => !key.startsWith('_')) // skip internal keys
+                .map(([key, value]) => `${key}: ${value}`)
+                .join(' | ');
+            }
+            return '';
+          })
+          .filter(Boolean)
+          .join('\n');
 
-      return `${title}\nHeaders: ${headers.join(' | ')}\n${rowsText}${insightsText}`;
-    }).join('\n\n');
+        // Include insights if available
+        let insightsText = '';
+        if (table.insights) {
+          const insights = [];
+          if (table.insights.mostReviewed) {
+            insights.push(
+              `Most reviewed: ${table.insights.mostReviewed['PRODUCT NAME'] || table.insights.mostReviewed[headers[1]] || 'N/A'} (${table.insights.mostReviewed._reviewCount} reviews)`,
+            );
+          }
+          if (table.insights.topRated) {
+            insights.push(
+              `Top rated: ${table.insights.topRated['PRODUCT NAME'] || table.insights.topRated[headers[1]] || 'N/A'} (${table.insights.topRated._ratingScore} stars)`,
+            );
+          }
+          if (table.insights.highestPrice) {
+            insights.push(
+              `Highest price: ${table.insights.highestPrice['PRODUCT NAME'] || table.insights.highestPrice[headers[1]] || 'N/A'} (${table.insights.highestPrice['PRICE'] || ''})`,
+            );
+          }
+          if (table.insights.lowestPrice) {
+            insights.push(
+              `Lowest price: ${table.insights.lowestPrice['PRODUCT NAME'] || table.insights.lowestPrice[headers[1]] || 'N/A'} (${table.insights.lowestPrice['PRICE'] || ''})`,
+            );
+          }
+          if (insights.length > 0) {
+            insightsText = '\nInsights: ' + insights.join(' | ');
+          }
+        }
+
+        return `${title}\nHeaders: ${headers.join(' | ')}\n${rowsText}${insightsText}`;
+      })
+      .join('\n\n');
   }
 
   // ── Combine everything ──
@@ -152,13 +187,24 @@ function extractFirstJsonObject(text) {
     const char = source[index];
 
     if (inString) {
-      if (isEscaped) { isEscaped = false; continue; }
-      if (char === '\\') { isEscaped = true; continue; }
-      if (char === '"') { inString = false; }
+      if (isEscaped) {
+        isEscaped = false;
+        continue;
+      }
+      if (char === '\\') {
+        isEscaped = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = false;
+      }
       continue;
     }
 
-    if (char === '"') { inString = true; continue; }
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
     if (char === '{') depth += 1;
     if (char === '}') depth -= 1;
 
@@ -187,7 +233,7 @@ function validateStructuredResponse(payload) {
   if (action === 'final_answer') {
     const isValidAnswer =
       typeof answer === 'string' ||
-      (Array.isArray(answer) && answer.every(item => typeof item === 'string'));
+      (Array.isArray(answer) && answer.every((item) => typeof item === 'string'));
     if (!isValidAnswer) return null;
   }
 
@@ -203,7 +249,9 @@ function parseStructuredResponse(content) {
   // Try direct parse first
   try {
     return validateStructuredResponse(JSON.parse(content));
-  } catch { /* not valid JSON directly */ }
+  } catch {
+    /* not valid JSON directly */
+  }
 
   // Try extracting JSON from markdown/text wrapping
   const extracted = extractFirstJsonObject(content);
@@ -234,7 +282,9 @@ async function fetchLLM(endpoint, payload, signal) {
     try {
       const errorData = await response.json();
       errorMessage = errorData.error || errorData.message || errorMessage;
-    } catch { /* ignore parse error */ }
+    } catch {
+      /* ignore parse error */
+    }
     throw new Error(errorMessage);
   }
 
@@ -246,7 +296,7 @@ function buildAbortError() {
     return new Error('Agent stopped by user');
   }
   return new Error(
-    'The request timed out because the page is too large or the model is slow. Please try again.'
+    'The request timed out because the page is too large or the model is slow. Please try again.',
   );
 }
 
@@ -258,7 +308,7 @@ CopilotSw.callLLM = async function callLLM(goal, pageContext, chatHistory) {
   try {
     const focusedPageContext = buildFocusedPageContext(goal, pageContext);
 
-    const llmHistory = chatHistory.filter(m => m.role !== 'navigation');
+    const llmHistory = chatHistory.filter((m) => m.role !== 'navigation');
     const payload = { goal, pageContext: focusedPageContext, chatHistory: llmHistory };
 
     // ── First attempt ──

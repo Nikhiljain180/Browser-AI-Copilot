@@ -16,22 +16,22 @@ describe('ReAct Loop - Agent Logic', () => {
       action: 'extract_data',
       action_input: {
         target: 'table.products',
-        schema: { name: 'string', price: 'number' }
+        schema: { name: 'string', price: 'number' },
       },
-      answer: null
+      answer: null,
     });
 
     // Mock tools
     mockTools = {
       read_page: vi.fn().mockResolvedValue({ elements: [], textContent: 'sample' }),
       click_element: vi.fn().mockResolvedValue({ success: true }),
-      extract_data: vi.fn().mockResolvedValue({ data: [{ name: 'Product', price: 100 }] })
+      extract_data: vi.fn().mockResolvedValue({ data: [{ name: 'Product', price: 100 }] }),
     };
   });
 
   it('should handle single-step task', async () => {
     const goal = 'Summarize this page';
-    
+
     // Simulate agent loop
     const response = await mockLLM();
     expect(response.action).toBeDefined();
@@ -40,8 +40,8 @@ describe('ReAct Loop - Agent Logic', () => {
   it('should handle multi-step workflow', async () => {
     // Simulate: read page → find element → click → extract data
     const goals = ['read_page', 'click_element', 'extract_data'];
-    
-    goals.forEach(tool => {
+
+    goals.forEach((tool) => {
       expect(mockTools[tool]).toBeDefined();
     });
   });
@@ -60,10 +60,10 @@ describe('ReAct Loop - Agent Logic', () => {
 
   it('should fallback to regex on JSON parse failure', () => {
     const malformedResponse = `Some text before { "action": "read_page" } some text after`;
-    
+
     const jsonMatch = malformedResponse.match(/\{[\s\S]*\}/);
     expect(jsonMatch).toBeTruthy();
-    
+
     const parsed = JSON.parse(jsonMatch[0]);
     expect(parsed.action).toBe('read_page');
   });
@@ -81,7 +81,8 @@ describe('ReAct Loop - Agent Logic', () => {
   });
 
   it('should handle tool failure and retry', async () => {
-    const failingTool = vi.fn()
+    const failingTool = vi
+      .fn()
       .mockRejectedValueOnce(new Error('First attempt failed'))
       .mockResolvedValueOnce({ success: true });
 
@@ -99,7 +100,7 @@ describe('ReAct Loop - Agent Logic', () => {
     const approvalRequiredAction = {
       toolName: 'click_element',
       toolInput: { selector: 'button[data-action="submit"]' },
-      requiresApproval: true
+      requiresApproval: true,
     };
 
     expect(approvalRequiredAction.requiresApproval).toBe(true);
@@ -142,7 +143,7 @@ describe('Tool Execution', () => {
       url: 'https://example.com',
       title: 'Example',
       elements: [],
-      textContent: 'Sample content'
+      textContent: 'Sample content',
     };
 
     expect(mockPageContext.url).toBe('https://example.com');
@@ -151,7 +152,7 @@ describe('Tool Execution', () => {
   it('should validate click_element parameters', () => {
     const validInput = {
       selector: '.button-class',
-      description: 'Submit form'
+      description: 'Submit form',
     };
 
     expect(validInput.selector).toBeTruthy();
@@ -161,7 +162,7 @@ describe('Tool Execution', () => {
   it('should validate fill_input parameters', () => {
     const validInput = {
       selector: 'input#email',
-      value: 'test@example.com'
+      value: 'test@example.com',
     };
 
     expect(validInput.value).toMatch(/@/);
@@ -170,7 +171,7 @@ describe('Tool Execution', () => {
   it('should extract structured data', () => {
     const mockData = [
       { col_0: 'Product A', col_1: '100' },
-      { col_0: 'Product B', col_1: '200' }
+      { col_0: 'Product B', col_1: '200' },
     ];
 
     expect(mockData.length).toBe(2);
@@ -188,14 +189,14 @@ describe('Token Budget Management', () => {
   it('should truncate page context to fit budget', () => {
     const context = {
       elements: Array(100).fill({ text: 'element' }),
-      textContent: 'x'.repeat(10000)
+      textContent: 'x'.repeat(10000),
     };
 
     // Simple truncation logic
     const truncated = {
       ...context,
       elements: context.elements.slice(0, 20),
-      textContent: context.textContent.substring(0, 500)
+      textContent: context.textContent.substring(0, 500),
     };
 
     expect(truncated.elements.length).toBeLessThan(context.elements.length);
@@ -205,26 +206,26 @@ describe('Token Budget Management', () => {
     const elements = [
       { visible: true, text: 'Visible 1' },
       { visible: false, text: 'Hidden 1' },
-      { visible: true, text: 'Visible 2' }
+      { visible: true, text: 'Visible 2' },
     ];
 
-    const visibleElements = elements.filter(e => e.visible);
+    const visibleElements = elements.filter((e) => e.visible);
     expect(visibleElements.length).toBe(2);
   });
 
   it('should create sliding window for conversation', () => {
-    const history = Array(15).fill(null).map((_, i) => ({ id: i }));
+    const history = Array(15)
+      .fill(null)
+      .map((_, i) => ({ id: i }));
     const windowed = history.slice(-10);
-    
+
     expect(windowed.length).toBe(10);
   });
 });
 
 describe('Error Handling', () => {
   it('should handle network timeout', async () => {
-    const timeout = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Timeout')), 100)
-    );
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 100));
 
     try {
       await timeout;
@@ -236,7 +237,7 @@ describe('Error Handling', () => {
   it('should report tool failures clearly', () => {
     const failure = {
       error: 'Element not found: .nonexistent-selector',
-      toolName: 'click_element'
+      toolName: 'click_element',
     };
 
     expect(failure.error).toContain('not found');
@@ -245,7 +246,7 @@ describe('Error Handling', () => {
   it('should handle missing DOM elements gracefully', () => {
     const selector = '#nonexistent';
     const element = document.querySelector(selector);
-    
+
     expect(element).toBeNull();
   });
 });

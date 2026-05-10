@@ -2,14 +2,14 @@
  * ═══════════════════════════════════════════════════════════════
  * ACCESSIBILITY TREE EXTRACTOR
  * Provides the AI agent with a complete, structured understanding
- * of the current page state 
+ * of the current page state
  * ═══════════════════════════════════════════════════════════════
  */
 
 async function extractAccessibilityTree(focusArea = null) {
   // Wait for dynamic content to render
-  await new Promise(resolve => setTimeout(resolve, 150));
-  
+  await new Promise((resolve) => setTimeout(resolve, 150));
+
   // Clear previous registry
   pageElementRegistry.clear();
 
@@ -25,9 +25,12 @@ async function extractAccessibilityTree(focusArea = null) {
         scrollX: window.scrollX,
         scrollY: window.scrollY,
         scrollHeight: document.documentElement.scrollHeight,
-        scrollPercent: Math.round((window.scrollY / (document.documentElement.scrollHeight - window.innerHeight)) * 100) || 0
+        scrollPercent:
+          Math.round(
+            (window.scrollY / (document.documentElement.scrollHeight - window.innerHeight)) * 100,
+          ) || 0,
       },
-      timestamp: Date.now()
+      timestamp: Date.now(),
     },
 
     // ── Page state (modals, alerts, loading) ──
@@ -55,7 +58,7 @@ async function extractAccessibilityTree(focusArea = null) {
     textContentLength: 0,
 
     // ── Focused area (if specified) ──
-    focusArea: focusArea || null
+    focusArea: focusArea || null,
   };
 
   // Determine root for extraction
@@ -81,7 +84,6 @@ async function extractAccessibilityTree(focusArea = null) {
   return result;
 }
 
-
 // ═══════════════════════════════════════════════════
 // PAGE STATE DETECTION
 // ═══════════════════════════════════════════════════
@@ -98,19 +100,22 @@ function extractPageState() {
     activeTab: null,
     openDropdown: null,
     focusedElement: null,
-    cookieBanner: false
+    cookieBanner: false,
   };
 
   // ── Modal / Dialog detection ──
   const modalSelectors = [
     '[role="dialog"][aria-modal="true"]',
     '[role="dialog"]:not([aria-hidden="true"])',
-    '.modal.show', '.modal.active', '.modal.open',
-    '.dialog.open', '.dialog.active',
+    '.modal.show',
+    '.modal.active',
+    '.modal.open',
+    '.dialog.open',
+    '.dialog.active',
     '[class*="modal"][class*="open"]',
     '[class*="modal"][class*="show"]',
     '[class*="modal"][class*="active"]',
-    'dialog[open]'
+    'dialog[open]',
   ];
 
   for (const selector of modalSelectors) {
@@ -120,7 +125,7 @@ function extractPageState() {
       state.modalContent = {
         title: getModalTitle(modal),
         text: sanitizeText(modal.innerText).substring(0, 500),
-        selector: generateSelector(modal)
+        selector: generateSelector(modal),
       };
       break;
     }
@@ -129,9 +134,12 @@ function extractPageState() {
   // ── Loading indicator ──
   const loadingSelectors = [
     '[aria-busy="true"]',
-    '.loading', '.spinner', '.skeleton',
-    '[class*="loading"]', '[class*="spinner"]',
-    '[role="progressbar"]'
+    '.loading',
+    '.spinner',
+    '.skeleton',
+    '[class*="loading"]',
+    '[class*="spinner"]',
+    '[role="progressbar"]',
   ];
 
   for (const selector of loadingSelectors) {
@@ -146,8 +154,10 @@ function extractPageState() {
   const alertSelectors = [
     '[role="alert"]',
     '[role="status"]',
-    '.alert:not(.alert-hidden)', '.toast.show',
-    '.notification.show', '[class*="toast"][class*="show"]'
+    '.alert:not(.alert-hidden)',
+    '.toast.show',
+    '.notification.show',
+    '[class*="toast"][class*="show"]',
   ];
 
   for (const selector of alertSelectors) {
@@ -160,7 +170,9 @@ function extractPageState() {
   }
 
   // ── Active tab ──
-  const activeTab = document.querySelector('[role="tab"][aria-selected="true"], .tab.active, .tab-btn.active');
+  const activeTab = document.querySelector(
+    '[role="tab"][aria-selected="true"], .tab.active, .tab-btn.active',
+  );
   if (activeTab) {
     state.activeTab = sanitizeText(activeTab.innerText);
   }
@@ -170,7 +182,7 @@ function extractPageState() {
   if (openDropdown) {
     state.openDropdown = {
       trigger: sanitizeText(openDropdown.innerText).substring(0, 50),
-      selector: generateSelector(openDropdown)
+      selector: generateSelector(openDropdown),
     };
   }
 
@@ -181,15 +193,17 @@ function extractPageState() {
       tag: focused.tagName.toLowerCase(),
       type: focused.type || undefined,
       label: getFieldLabel(focused) || focused.id || undefined,
-      selector: generateSelector(focused)
+      selector: generateSelector(focused),
     };
   }
 
   // ── Cookie banner ──
   const cookieSelectors = [
-    '[class*="cookie"]', '[class*="consent"]',
-    '[id*="cookie"]', '[id*="consent"]',
-    '[aria-label*="cookie"]'
+    '[class*="cookie"]',
+    '[class*="consent"]',
+    '[id*="cookie"]',
+    '[id*="consent"]',
+    '[aria-label*="cookie"]',
   ];
 
   for (const selector of cookieSelectors) {
@@ -202,7 +216,6 @@ function extractPageState() {
 
   return state;
 }
-
 
 // ═══════════════════════════════════════════════════
 // LANDMARKS & STRUCTURE
@@ -221,19 +234,21 @@ function extractLandmarks() {
     { selector: 'aside, [role="complementary"]', role: 'complementary' },
     { selector: 'footer, [role="contentinfo"]', role: 'contentinfo' },
     { selector: '[role="search"]', role: 'search' },
-    { selector: '[role="region"][aria-label]', role: 'region' }
+    { selector: '[role="region"][aria-label]', role: 'region' },
   ];
 
   landmarkMap.forEach(({ selector, role }) => {
-    document.querySelectorAll(selector).forEach(el => {
+    document.querySelectorAll(selector).forEach((el) => {
       if (!isElementVisible(el)) return;
 
       landmarks.push({
         role,
-        label: el.getAttribute('aria-label') || el.getAttribute('aria-labelledby') 
-               ? getAriaLabelledByText(el) : undefined,
+        label:
+          el.getAttribute('aria-label') || el.getAttribute('aria-labelledby')
+            ? getAriaLabelledByText(el)
+            : undefined,
         selector: generateSelector(el),
-        hasInteractiveContent: el.querySelector('button, a, input, select, textarea') !== null
+        hasInteractiveContent: el.querySelector('button, a, input, select, textarea') !== null,
       });
     });
   });
@@ -241,29 +256,26 @@ function extractLandmarks() {
   return landmarks;
 }
 
-
 /**
  * Extract heading hierarchy — gives AI the page outline
  */
 function extractHeadingHierarchy() {
   const headings = [];
-  
-  document.querySelectorAll('h1, h2, h3, h4, h5, h6, [role="heading"]').forEach(heading => {
+
+  document.querySelectorAll('h1, h2, h3, h4, h5, h6, [role="heading"]').forEach((heading) => {
     if (!isElementVisible(heading)) return;
 
-    const level = heading.getAttribute('aria-level') || 
-                  parseInt(heading.tagName[1]) || 1;
+    const level = heading.getAttribute('aria-level') || parseInt(heading.tagName[1]) || 1;
 
     headings.push({
       level,
       text: sanitizeText(heading.innerText).substring(0, 100),
-      selector: generateSelector(heading)
+      selector: generateSelector(heading),
     });
   });
 
   return headings;
 }
-
 
 // ═══════════════════════════════════════════════════
 // PAGE STRUCTURE (Sections)
@@ -275,13 +287,13 @@ function extractPageStructure(tree, root) {
     'section[aria-labelledby]',
     '[role="region"]',
     'article',
-    'section'
+    'section',
   ];
 
   const seenSections = new Set();
 
-  sectionSelectors.forEach(selector => {
-    root.querySelectorAll(selector).forEach(section => {
+  sectionSelectors.forEach((selector) => {
+    root.querySelectorAll(selector).forEach((section) => {
       if (!isElementVisible(section)) return;
 
       const title = getSectionTitle(section);
@@ -302,14 +314,13 @@ function extractPageStructure(tree, root) {
         hasForm: section.querySelector('form') !== null,
         hasTable: section.querySelector('table') !== null,
         hasInteractive: section.querySelector('button, input, select') !== null,
-        itemCount: countRepeatingItems(section)
+        itemCount: countRepeatingItems(section),
       });
 
       if (tree.sections.length >= 15) return;
     });
   });
 }
-
 
 // ═══════════════════════════════════════════════════
 // INTERACTIVE ELEMENTS (comprehensive)
@@ -318,16 +329,25 @@ function extractPageStructure(tree, root) {
 function extractAllInteractiveElements(tree, root) {
   // Much broader selector — catches custom components too
   const selector = [
-    'button', '[role="button"]',
-    'input', 'select', 'textarea',
-    '[role="tab"]', '[role="menuitem"]', '[role="option"]',
-    '[role="switch"]', '[role="slider"]', '[role="spinbutton"]',
-    '[role="checkbox"]', '[role="radio"]',
+    'button',
+    '[role="button"]',
+    'input',
+    'select',
+    'textarea',
+    '[role="tab"]',
+    '[role="menuitem"]',
+    '[role="option"]',
+    '[role="switch"]',
+    '[role="slider"]',
+    '[role="spinbutton"]',
+    '[role="checkbox"]',
+    '[role="radio"]',
     '[role="link"]',
-    '[onclick]', '[tabindex="0"]',
+    '[onclick]',
+    '[tabindex="0"]',
     '[contenteditable="true"]',
     'details > summary',
-    'a[href]'
+    'a[href]',
   ].join(', ');
 
   const elements = root.querySelectorAll(selector);
@@ -357,24 +377,27 @@ function extractAllInteractiveElements(tree, root) {
       selector: elSelector,
       visible: isVisible,
       disabled: isDisabled(el),
-      position: isVisible ? {
-        x: Math.round(rect.left),
-        y: Math.round(rect.top),
-        width: Math.round(rect.width),
-        height: Math.round(rect.height),
-        inViewport: isElementInViewport(el)
-      } : undefined,
+      position: isVisible
+        ? {
+            x: Math.round(rect.left),
+            y: Math.round(rect.top),
+            width: Math.round(rect.width),
+            height: Math.round(rect.height),
+            inViewport: isElementInViewport(el),
+          }
+        : undefined,
       // Accessibility attributes
       ariaLabel: el.getAttribute('aria-label') || undefined,
       ariaExpanded: el.getAttribute('aria-expanded') || undefined,
       ariaChecked: el.getAttribute('aria-checked') || undefined,
       ariaSelected: el.getAttribute('aria-selected') || undefined,
       // State
-      checked: (el.type === 'checkbox' || el.type === 'radio') ? el.checked : undefined,
-      value: (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') ? el.value || undefined : undefined,
+      checked: el.type === 'checkbox' || el.type === 'radio' ? el.checked : undefined,
+      value:
+        el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' ? el.value || undefined : undefined,
       // Context
       label: getFieldLabel(el) || undefined,
-      parentSection: getParentSectionTitle(el) || undefined
+      parentSection: getParentSectionTitle(el) || undefined,
     };
 
     tree.interactiveElements.push(elementData);
@@ -388,12 +411,11 @@ function extractAllInteractiveElements(tree, root) {
       tree.links.push({
         ...elementData,
         href: el.href,
-        isExternal: el.hostname !== window.location.hostname
+        isExternal: el.hostname !== window.location.hostname,
       });
     }
   });
 }
-
 
 // ═══════════════════════════════════════════════════
 // FORMS (enhanced)
@@ -418,8 +440,8 @@ function extractAllForms(tree, root) {
         filledFields: 0,
         requiredFields: 0,
         requiredUnfilled: 0,
-        isComplete: false
-      }
+        isComplete: false,
+      },
     };
 
     // ── Extract fields ──
@@ -441,18 +463,23 @@ function extractAllForms(tree, root) {
         isFilled: isFieldFilled(field),
         selector: generateSelector(field),
         // Type-specific data
-        options: field.tagName === 'SELECT'
-          ? Array.from(field.options)
-              .filter(opt => opt.value) // skip placeholder options
-              .map(opt => ({ value: opt.value, text: opt.textContent.trim(), selected: opt.selected }))
-          : undefined,
-        checked: (field.type === 'checkbox' || field.type === 'radio') ? field.checked : undefined,
+        options:
+          field.tagName === 'SELECT'
+            ? Array.from(field.options)
+                .filter((opt) => opt.value) // skip placeholder options
+                .map((opt) => ({
+                  value: opt.value,
+                  text: opt.textContent.trim(),
+                  selected: opt.selected,
+                }))
+            : undefined,
+        checked: field.type === 'checkbox' || field.type === 'radio' ? field.checked : undefined,
         min: field.min || undefined,
         max: field.max || undefined,
         pattern: field.pattern || undefined,
         maxLength: field.maxLength > 0 ? field.maxLength : undefined,
         // Validation state
-        validationMessage: field.validationMessage || undefined
+        validationMessage: field.validationMessage || undefined,
       };
 
       // For radio buttons, group them
@@ -465,38 +492,42 @@ function extractAllForms(tree, root) {
     });
 
     // ── Extract buttons ──
-    form.querySelectorAll('button, input[type="submit"], input[type="button"], [role="button"]').forEach((btn, btnIdx) => {
-      const buttonData = {
-        agentId: registerElement(`${formData.agentId}_btn_${btnIdx}`, btn),
-        text: sanitizeText(btn.innerText || btn.value || btn.getAttribute('aria-label') || ''),
-        type: btn.type || 'button',
-        disabled: isDisabled(btn),
-        visible: isElementVisible(btn),
-        selector: generateSelector(btn),
-        intent: classifyButtonIntent(btn)
-      };
+    form
+      .querySelectorAll('button, input[type="submit"], input[type="button"], [role="button"]')
+      .forEach((btn, btnIdx) => {
+        const buttonData = {
+          agentId: registerElement(`${formData.agentId}_btn_${btnIdx}`, btn),
+          text: sanitizeText(btn.innerText || btn.value || btn.getAttribute('aria-label') || ''),
+          type: btn.type || 'button',
+          disabled: isDisabled(btn),
+          visible: isElementVisible(btn),
+          selector: generateSelector(btn),
+          intent: classifyButtonIntent(btn),
+        };
 
-      if (buttonData.intent === 'submit' || buttonData.type === 'submit') {
-        formData.submitButtons.push(buttonData);
-      } else {
-        formData.otherButtons.push(buttonData);
-      }
-    });
+        if (buttonData.intent === 'submit' || buttonData.type === 'submit') {
+          formData.submitButtons.push(buttonData);
+        } else {
+          formData.otherButtons.push(buttonData);
+        }
+      });
 
     // ── Calculate form state ──
     formData.state.totalFields = formData.fields.length;
-    formData.state.filledFields = formData.fields.filter(f => f.isFilled).length;
-    formData.state.requiredFields = formData.fields.filter(f => f.required).length;
-    formData.state.requiredUnfilled = formData.fields.filter(f => f.required && !f.isFilled).length;
+    formData.state.filledFields = formData.fields.filter((f) => f.isFilled).length;
+    formData.state.requiredFields = formData.fields.filter((f) => f.required).length;
+    formData.state.requiredUnfilled = formData.fields.filter(
+      (f) => f.required && !f.isFilled,
+    ).length;
     formData.state.isComplete = formData.state.requiredUnfilled === 0;
-    formData.state.completionPercent = formData.state.totalFields > 0
-      ? Math.round((formData.state.filledFields / formData.state.totalFields) * 100)
-      : 0;
+    formData.state.completionPercent =
+      formData.state.totalFields > 0
+        ? Math.round((formData.state.filledFields / formData.state.totalFields) * 100)
+        : 0;
 
     tree.forms.push(formData);
   });
 }
-
 
 // ═══════════════════════════════════════════════════
 // TABLES (enhanced)
@@ -510,17 +541,18 @@ function extractAllTables(tree, root) {
     const tableData = {
       agentId: tableAgentId,
       selector: generateSelector(table),
-      title: table.getAttribute('aria-label') || 
-             getSectionTitle(table.closest('section, .card, div') || table.parentElement),
+      title:
+        table.getAttribute('aria-label') ||
+        getSectionTitle(table.closest('section, .card, div') || table.parentElement),
       caption: table.querySelector('caption')?.innerText?.trim() || undefined,
       headers: [],
       rows: [],
       totalRows: 0,
-      columns: 0
+      columns: 0,
     };
 
     // Extract headers
-    table.querySelectorAll('thead th, thead td').forEach(th => {
+    table.querySelectorAll('thead th, thead td').forEach((th) => {
       tableData.headers.push(sanitizeText(th.innerText));
     });
 
@@ -528,7 +560,7 @@ function extractAllTables(tree, root) {
     if (tableData.headers.length === 0) {
       const firstRow = table.querySelector('tr');
       if (firstRow) {
-        firstRow.querySelectorAll('th').forEach(th => {
+        firstRow.querySelectorAll('th').forEach((th) => {
           tableData.headers.push(sanitizeText(th.innerText));
         });
       }
@@ -551,7 +583,7 @@ function extractAllTables(tree, root) {
       const rowData = {
         index: i,
         data: {},
-        actions: []
+        actions: [],
       };
 
       // Map each cell to its header name
@@ -566,7 +598,7 @@ function extractAllTables(tree, root) {
 
       // Add data-* attributes from the row
       if (row.dataset && Object.keys(row.dataset).length > 0) {
-        Object.keys(row.dataset).forEach(key => {
+        Object.keys(row.dataset).forEach((key) => {
           rowData.data[key] = row.dataset[key];
         });
       }
@@ -577,7 +609,7 @@ function extractAllTables(tree, root) {
           type: action.tagName.toLowerCase() === 'a' ? 'link' : 'button',
           text: sanitizeText(action.innerText || action.getAttribute('aria-label') || ''),
           selector: generateSelector(action),
-          agentId: registerElement(`${tableAgentId}_row${i}_action${actionIdx}`, action)
+          agentId: registerElement(`${tableAgentId}_row${i}_action${actionIdx}`, action),
         });
       });
 
@@ -615,12 +647,14 @@ function extractTableInsights(tableData) {
   let priceHeader = null;
   let nameHeader = null;
 
-  tableData.headers.forEach(h => {
+  tableData.headers.forEach((h) => {
     const lower = h.toLowerCase();
     if (lower.includes('rating') || lower.includes('star')) ratingHeader = h;
     if (lower.includes('review') || lower.includes('popularity')) reviewHeader = h;
-    if (lower.includes('price') || lower.includes('cost') || lower.includes('total')) priceHeader = h;
-    if (lower.includes('name') || lower.includes('product') || lower.includes('title')) nameHeader = h;
+    if (lower.includes('price') || lower.includes('cost') || lower.includes('total'))
+      priceHeader = h;
+    if (lower.includes('name') || lower.includes('product') || lower.includes('title'))
+      nameHeader = h;
   });
 
   // Find most reviewed
@@ -628,7 +662,7 @@ function extractTableInsights(tableData) {
     let maxReviews = 0;
     let maxReviewRow = null;
 
-    rows.forEach(row => {
+    rows.forEach((row) => {
       const reviewText = row.data[reviewHeader] || '';
       const match = reviewText.match(/(\d+)/);
       if (match) {
@@ -643,7 +677,7 @@ function extractTableInsights(tableData) {
     if (maxReviewRow) {
       insights.mostReviewed = {
         ...maxReviewRow.data,
-        _reviewCount: maxReviews
+        _reviewCount: maxReviews,
       };
     }
   }
@@ -653,7 +687,7 @@ function extractTableInsights(tableData) {
     let maxRating = 0;
     let maxRatingRow = null;
 
-    rows.forEach(row => {
+    rows.forEach((row) => {
       const ratingText = row.data[ratingHeader] || '';
       const starCount = (ratingText.match(/★/g) || []).length;
       const numMatch = ratingText.match(/([\d.]+)/);
@@ -668,7 +702,7 @@ function extractTableInsights(tableData) {
     if (maxRatingRow) {
       insights.topRated = {
         ...maxRatingRow.data,
-        _ratingScore: maxRating
+        _ratingScore: maxRating,
       };
     }
   }
@@ -680,12 +714,18 @@ function extractTableInsights(tableData) {
     let maxPriceRow = null;
     let minPriceRow = null;
 
-    rows.forEach(row => {
+    rows.forEach((row) => {
       const priceText = row.data[priceHeader] || '';
       const priceNum = parseFloat(priceText.replace(/[^0-9.]/g, ''));
       if (!isNaN(priceNum)) {
-        if (priceNum > maxPrice) { maxPrice = priceNum; maxPriceRow = row; }
-        if (priceNum < minPrice) { minPrice = priceNum; minPriceRow = row; }
+        if (priceNum > maxPrice) {
+          maxPrice = priceNum;
+          maxPriceRow = row;
+        }
+        if (priceNum < minPrice) {
+          minPrice = priceNum;
+          minPriceRow = row;
+        }
       }
     });
 
@@ -713,7 +753,7 @@ function extractAllLists(tree, root) {
       type: list.tagName.toLowerCase() === 'ol' ? 'ordered' : 'unordered',
       title: getSectionTitle(list.parentElement),
       itemCount: items.length,
-      items: []
+      items: [],
     };
 
     const maxItems = 10;
@@ -726,8 +766,8 @@ function extractAllLists(tree, root) {
         text: sanitizeText(item.innerText).substring(0, 200),
         hasLink: item.querySelector('a') !== null,
         hasButton: item.querySelector('button') !== null,
-        data: item.dataset && Object.keys(item.dataset).length > 0 
-              ? { ...item.dataset } : undefined
+        data:
+          item.dataset && Object.keys(item.dataset).length > 0 ? { ...item.dataset } : undefined,
       });
     }
 
@@ -739,23 +779,27 @@ function extractAllLists(tree, root) {
   });
 }
 
-
 // ═══════════════════════════════════════════════════
 // CARD PATTERNS (product cards, review cards, etc.)
 // ═══════════════════════════════════════════════════
 
 function extractCardPatterns(tree, root) {
   const gridSelectors = [
-    '.product-grid', '.card-grid', '.grid',
-    '[class*="grid"]', '[class*="cards"]', '[class*="products"]',
-    '[class*="reviews"]', '[class*="listings"]',
-    '[role="list"]'
+    '.product-grid',
+    '.card-grid',
+    '.grid',
+    '[class*="grid"]',
+    '[class*="cards"]',
+    '[class*="products"]',
+    '[class*="reviews"]',
+    '[class*="listings"]',
+    '[role="list"]',
   ];
 
   const processedContainers = new Set();
 
-  gridSelectors.forEach(selector => {
-    root.querySelectorAll(selector).forEach(container => {
+  gridSelectors.forEach((selector) => {
+    root.querySelectorAll(selector).forEach((container) => {
       const containerSelector = generateSelector(container);
       if (processedContainers.has(containerSelector)) return;
 
@@ -771,7 +815,7 @@ function extractCardPatterns(tree, root) {
         title: getSectionTitle(container.parentElement || container),
         itemCount: items.length,
         items: [],
-        insights: {}
+        insights: {},
       };
 
       let highestRating = { value: 0, index: -1 };
@@ -783,24 +827,26 @@ function extractCardPatterns(tree, root) {
           index: cardIdx,
           agentId: registerElement(`cards_${tree.cards.length}_item_${cardIdx}`, card),
           selector: generateSelector(card),
-          data: card.dataset && Object.keys(card.dataset).length > 0 
-                ? { ...card.dataset } : undefined
+          data:
+            card.dataset && Object.keys(card.dataset).length > 0 ? { ...card.dataset } : undefined,
         };
 
         // Extract name/title
         const heading = card.querySelector('h1, h2, h3, h4, h5, h6');
-        const title = heading?.innerText?.trim() ||
-                      card.querySelector('.title, .name, .product-name, .heading')?.innerText?.trim() ||
-                      card.getAttribute('aria-label') ||
-                      '';
+        const title =
+          heading?.innerText?.trim() ||
+          card.querySelector('.title, .name, .product-name, .heading')?.innerText?.trim() ||
+          card.getAttribute('aria-label') ||
+          '';
         if (title) cardData.name = sanitizeText(title).substring(0, 120);
 
         // Extract rating
         const ratingEl = card.querySelector('[class*="rating"], [class*="star"], [data-rating]');
         if (ratingEl) {
-          cardData.rating = ratingEl.getAttribute('data-rating') ||
-                            ratingEl.getAttribute('aria-label') ||
-                            sanitizeText(ratingEl.innerText);
+          cardData.rating =
+            ratingEl.getAttribute('data-rating') ||
+            ratingEl.getAttribute('aria-label') ||
+            sanitizeText(ratingEl.innerText);
         }
 
         // Extract price
@@ -810,7 +856,9 @@ function extractCardPatterns(tree, root) {
         }
 
         // Extract reviewer/author
-        const reviewerEl = card.querySelector('[class*="author"], [class*="reviewer"], [class*="user"], cite, [rel="author"]');
+        const reviewerEl = card.querySelector(
+          '[class*="author"], [class*="reviewer"], [class*="user"], cite, [rel="author"]',
+        );
         if (reviewerEl) {
           cardData.reviewer = sanitizeText(reviewerEl.innerText);
         }
@@ -849,13 +897,13 @@ function extractCardPatterns(tree, root) {
 
         // Extract actions
         const actions = [];
-        card.querySelectorAll('button, [role="button"], a.btn').forEach(btn => {
+        card.querySelectorAll('button, [role="button"], a.btn').forEach((btn) => {
           const text = sanitizeText(btn.innerText || btn.getAttribute('aria-label') || '');
           if (text) {
             actions.push({
               text,
               selector: generateSelector(btn),
-              agentId: registerElement(`cards_${tree.cards.length}_item_${cardIdx}_action`, btn)
+              agentId: registerElement(`cards_${tree.cards.length}_item_${cardIdx}_action`, btn),
             });
           }
         });
@@ -902,7 +950,7 @@ function buildTextSummary(root, fullText) {
     // First meaningful paragraph
     intro: '',
     // Key entities detected
-    detected: extractByPatterns(root)
+    detected: extractByPatterns(root),
   };
 
   // Get first substantial paragraph
@@ -921,7 +969,6 @@ function buildTextSummary(root, fullText) {
   return summary;
 }
 
-
 // ═══════════════════════════════════════════════════
 // HELPER FUNCTIONS
 // ═══════════════════════════════════════════════════
@@ -933,7 +980,9 @@ function getExtractionRoot(focusArea) {
   if (focusElement) return focusElement;
 
   // If modal is open, focus on that
-  const modal = document.querySelector('[role="dialog"]:not([aria-hidden="true"]), dialog[open], .modal.show');
+  const modal = document.querySelector(
+    '[role="dialog"]:not([aria-hidden="true"]), dialog[open], .modal.show',
+  );
   if (modal && isElementVisible(modal)) return modal;
 
   return document;
@@ -945,7 +994,9 @@ function getMetaContent(name) {
 }
 
 function getModalTitle(modal) {
-  const titleEl = modal.querySelector('h1, h2, h3, [class*="title"], [class*="header"] h1, [class*="header"] h2');
+  const titleEl = modal.querySelector(
+    'h1, h2, h3, [class*="title"], [class*="header"] h1, [class*="header"] h2',
+  );
   return titleEl ? sanitizeText(titleEl.innerText) : '';
 }
 
@@ -964,7 +1015,9 @@ function getSectionTitle(element) {
   }
 
   // Heading inside or before
-  const heading = element.querySelector(':scope > h1, :scope > h2, :scope > h3, :scope > .panel-title, :scope > .card-header');
+  const heading = element.querySelector(
+    ':scope > h1, :scope > h2, :scope > h3, :scope > .panel-title, :scope > .card-header',
+  );
   if (heading) return sanitizeText(heading.innerText).substring(0, 80);
 
   // Previous sibling heading
@@ -984,12 +1037,12 @@ function getParentSectionTitle(element) {
 
 function getElementText(element) {
   return sanitizeText(
-    element.innerText || 
-    element.value || 
-    element.placeholder || 
-    element.getAttribute('aria-label') || 
-    element.title || 
-    ''
+    element.innerText ||
+      element.value ||
+      element.placeholder ||
+      element.getAttribute('aria-label') ||
+      element.title ||
+      '',
   ).substring(0, 80);
 }
 
@@ -1002,10 +1055,10 @@ function getAriaLabelledByText(element) {
 
 function getRadioGroupOptions(name) {
   const radios = document.querySelectorAll(`input[type="radio"][name="${name}"]`);
-  return Array.from(radios).map(radio => ({
+  return Array.from(radios).map((radio) => ({
     value: radio.value,
     label: getFieldLabel(radio) || radio.value,
-    checked: radio.checked
+    checked: radio.checked,
   }));
 }
 
@@ -1036,9 +1089,14 @@ function isFieldFilled(field) {
 
 function countRepeatingItems(section) {
   const cardSelectors = [
-    '[data-product-id]', '[data-item-id]', '[data-id]',
-    '.card', '.item', '.product', '.review',
-    ':scope > div > div'
+    '[data-product-id]',
+    '[data-item-id]',
+    '[data-id]',
+    '.card',
+    '.item',
+    '.product',
+    '.review',
+    ':scope > div > div',
   ];
 
   for (const selector of cardSelectors) {
@@ -1069,10 +1127,17 @@ function hasRepeatingChildren(element) {
 
 function findRepeatingItems(container) {
   const selectors = [
-    '[data-product-id]', '[data-review-id]', '[data-order-id]',
-    '[data-ticket-id]', '[data-item-id]', '[data-id]',
-    ':scope > .card', ':scope > .item', ':scope > article',
-    ':scope > div[class]', ':scope > li'
+    '[data-product-id]',
+    '[data-review-id]',
+    '[data-order-id]',
+    '[data-ticket-id]',
+    '[data-item-id]',
+    '[data-id]',
+    ':scope > .card',
+    ':scope > .item',
+    ':scope > article',
+    ':scope > div[class]',
+    ':scope > li',
   ];
 
   for (const selector of selectors) {

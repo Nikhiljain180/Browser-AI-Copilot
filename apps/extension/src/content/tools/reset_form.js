@@ -9,12 +9,12 @@ function resetForm(toolInput = {}) {
       selector,
       agentId,
       agent_id,
-      mode = 'empty',           // 'empty' | 'defaults' | 'native'
-      fields = null,            // array of field names/selectors to reset (null = all)
-      clearValidation = true,   // also clear validation error styles
-      clearVisualState = true,  // clear any highlight/border changes from fillInput
-      saveUndo = true,          // store previous values for undo
-      confirm = false           // if true, would require confirmation (for safety)
+      mode = 'empty', // 'empty' | 'defaults' | 'native'
+      fields = null, // array of field names/selectors to reset (null = all)
+      clearValidation = true, // also clear validation error styles
+      clearVisualState = true, // clear any highlight/border changes from fillInput
+      saveUndo = true, // store previous values for undo
+      confirm = false, // if true, would require confirmation (for safety)
     } = toolInput;
 
     // ── 1. Find the target form(s) ──
@@ -36,12 +36,12 @@ function resetForm(toolInput = {}) {
     let totalCleared = 0;
     let totalForms = 0;
 
-    forms.forEach(form => {
+    forms.forEach((form) => {
       const cleared = resetSingleForm(form, {
         mode,
         fields,
         clearValidation,
-        clearVisualState
+        clearVisualState,
       });
       totalCleared += cleared;
       totalForms++;
@@ -59,14 +59,12 @@ function resetForm(toolInput = {}) {
       formsReset: totalForms,
       fieldsCleared: totalCleared,
       undoAvailable: saveUndo,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     };
-
   } catch (error) {
     return { error: error.message };
   }
 }
-
 
 /**
  * Undo form reset — restore previous values
@@ -103,10 +101,9 @@ function undoFormReset() {
   return {
     success: true,
     message: `✓ Undo complete: restored ${restoredCount} field(s)`,
-    timestamp: Date.now()
+    timestamp: Date.now(),
   };
 }
-
 
 // ═══════════════════════════════════════════════════
 // FORM RESOLUTION
@@ -142,7 +139,6 @@ function resolveTargetForms({ selector, agentId, agent_id }) {
   return Array.from(allForms);
 }
 
-
 // ═══════════════════════════════════════════════════
 // SINGLE FORM RESET
 // ═══════════════════════════════════════════════════
@@ -155,7 +151,7 @@ function resetSingleForm(form, options) {
   if (mode === 'native' && form.tagName === 'FORM') {
     form.reset();
     // Still need to fire events for frameworks
-    form.querySelectorAll('input, textarea, select').forEach(field => {
+    form.querySelectorAll('input, textarea, select').forEach((field) => {
       field.dispatchEvent(new Event('input', { bubbles: true }));
       field.dispatchEvent(new Event('change', { bubbles: true }));
     });
@@ -164,7 +160,7 @@ function resetSingleForm(form, options) {
     // ── Manual reset (field by field) ──
     const formFields = form.querySelectorAll('input, textarea, select, [contenteditable="true"]');
 
-    formFields.forEach(field => {
+    formFields.forEach((field) => {
       // Skip if we're only resetting specific fields
       if (fields && !shouldResetField(field, fields)) return;
 
@@ -188,7 +184,6 @@ function resetSingleForm(form, options) {
 
   return clearedCount;
 }
-
 
 // ═══════════════════════════════════════════════════
 // FIELD CLEARING (universal)
@@ -248,11 +243,13 @@ function clearField(field, mode) {
     if (currentContent.trim()) {
       field.innerHTML = '';
       field.innerText = targetValue;
-      field.dispatchEvent(new InputEvent('input', {
-        bubbles: true,
-        cancelable: true,
-        inputType: 'deleteContent'
-      }));
+      field.dispatchEvent(
+        new InputEvent('input', {
+          bubbles: true,
+          cancelable: true,
+          inputType: 'deleteContent',
+        }),
+      );
       return true;
     }
     return false;
@@ -270,7 +267,6 @@ function clearField(field, mode) {
   return false;
 }
 
-
 /**
  * Get the HTML default value for a field
  */
@@ -281,7 +277,6 @@ function getDefaultValue(field) {
   }
   return '';
 }
-
 
 /**
  * Get default selected index for <select>
@@ -294,7 +289,6 @@ function getDefaultSelectedIndex(select) {
   return 0; // First option
 }
 
-
 /**
  * Determine if a field should be reset (partial reset)
  */
@@ -304,15 +298,16 @@ function shouldResetField(field, fieldList) {
   const fieldLabel = getFieldLabel(field).toLowerCase();
   const fieldSelector = generateSelector(field);
 
-  return fieldList.some(target => {
+  return fieldList.some((target) => {
     const t = target.toLowerCase();
-    return fieldName.toLowerCase() === t ||
-           fieldId.toLowerCase() === t ||
-           fieldLabel.includes(t) ||
-           fieldSelector === target;
+    return (
+      fieldName.toLowerCase() === t ||
+      fieldId.toLowerCase() === t ||
+      fieldLabel.includes(t) ||
+      fieldSelector === target
+    );
   });
 }
-
 
 // ═══════════════════════════════════════════════════
 // VISUAL & VALIDATION STATE CLEANUP
@@ -323,19 +318,24 @@ function shouldResetField(field, fieldList) {
  */
 function clearValidationState(form) {
   // Clear native validation
-  form.querySelectorAll(':invalid').forEach(field => {
+  form.querySelectorAll(':invalid').forEach((field) => {
     field.setCustomValidity('');
   });
 
   // Clear common validation error classes
   const errorClasses = [
-    'is-invalid', 'has-error', 'error', 'invalid',
-    'field-error', 'input-error', 'form-error',
-    'was-validated'
+    'is-invalid',
+    'has-error',
+    'error',
+    'invalid',
+    'field-error',
+    'input-error',
+    'form-error',
+    'was-validated',
   ];
 
-  errorClasses.forEach(cls => {
-    form.querySelectorAll(`.${cls}`).forEach(el => {
+  errorClasses.forEach((cls) => {
+    form.querySelectorAll(`.${cls}`).forEach((el) => {
       el.classList.remove(cls);
     });
   });
@@ -345,19 +345,22 @@ function clearValidationState(form) {
 
   // Hide error message elements
   const errorMessageSelectors = [
-    '.error-message', '.field-error-message', '.invalid-feedback',
-    '.help-block.error', '[class*="error-msg"]', '[class*="error-text"]',
-    '[role="alert"]'
+    '.error-message',
+    '.field-error-message',
+    '.invalid-feedback',
+    '.help-block.error',
+    '[class*="error-msg"]',
+    '[class*="error-text"]',
+    '[role="alert"]',
   ];
 
-  errorMessageSelectors.forEach(selector => {
-    form.querySelectorAll(selector).forEach(el => {
+  errorMessageSelectors.forEach((selector) => {
+    form.querySelectorAll(selector).forEach((el) => {
       el.style.display = 'none';
       el.textContent = '';
     });
   });
 }
-
 
 /**
  * Clear any visual styles added by fillInput (green borders, glows, etc.)
@@ -365,7 +368,7 @@ function clearValidationState(form) {
 function clearVisualStyles(form) {
   const fields = form.querySelectorAll('input, textarea, select, [contenteditable]');
 
-  fields.forEach(field => {
+  fields.forEach((field) => {
     // Remove inline styles that fillInput might have added
     field.style.removeProperty('border-color');
     field.style.removeProperty('box-shadow');
@@ -375,16 +378,20 @@ function clearVisualStyles(form) {
 
     // Remove success/highlight classes
     const highlightClasses = [
-      'is-valid', 'success', 'filled', 'highlighted',
-      'copilot-filled', 'ai-filled', 'auto-filled'
+      'is-valid',
+      'success',
+      'filled',
+      'highlighted',
+      'copilot-filled',
+      'ai-filled',
+      'auto-filled',
     ];
-    highlightClasses.forEach(cls => field.classList.remove(cls));
+    highlightClasses.forEach((cls) => field.classList.remove(cls));
 
     // Remove animation classes
     field.classList.remove('highlight-extract', 'animate-fill');
   });
 }
-
 
 // ═══════════════════════════════════════════════════
 // STANDALONE INPUTS (no <form> tag)
@@ -395,15 +402,16 @@ function clearStandaloneInputs(mode, fields, clearVisualState) {
 
   const allInputs = document.querySelectorAll(
     'input:not(form input), textarea:not(form textarea), ' +
-    'select:not(form select), [contenteditable="true"]:not(form [contenteditable])'
+      'select:not(form select), [contenteditable="true"]:not(form [contenteditable])',
   );
 
   // If no standalone inputs, try ALL visible inputs
-  const inputs = allInputs.length > 0
-    ? allInputs
-    : document.querySelectorAll('input, textarea, select, [contenteditable="true"]');
+  const inputs =
+    allInputs.length > 0
+      ? allInputs
+      : document.querySelectorAll('input, textarea, select, [contenteditable="true"]');
 
-  inputs.forEach(field => {
+  inputs.forEach((field) => {
     if (!isElementVisible(field)) return;
     if (field.disabled) return;
     if (fields && !shouldResetField(field, fields)) return;
@@ -423,10 +431,9 @@ function clearStandaloneInputs(mode, fields, clearVisualState) {
     message: `✓ No <form> found. Cleared ${count} standalone input(s)`,
     mode,
     fieldsCleared: count,
-    timestamp: Date.now()
+    timestamp: Date.now(),
   };
 }
-
 
 // ═══════════════════════════════════════════════════
 // FORM STATE CAPTURE (for undo)
@@ -435,16 +442,16 @@ function clearStandaloneInputs(mode, fields, clearVisualState) {
 function captureFormState(forms) {
   const state = [];
 
-  forms.forEach(form => {
+  forms.forEach((form) => {
     const fields = form.querySelectorAll('input, textarea, select, [contenteditable]');
 
-    fields.forEach(field => {
+    fields.forEach((field) => {
       const type = (field.type || '').toLowerCase();
       if (['hidden', 'submit', 'button', 'reset'].includes(type)) return;
 
       const fieldState = {
         selector: generateSelector(field),
-        type
+        type,
       };
 
       if (type === 'checkbox' || type === 'radio') {
@@ -463,7 +470,6 @@ function captureFormState(forms) {
 
   return state;
 }
-
 
 // ═══════════════════════════════════════════════════
 // UTILITIES

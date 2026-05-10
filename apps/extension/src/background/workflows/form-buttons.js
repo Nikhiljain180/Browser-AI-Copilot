@@ -14,7 +14,11 @@ CopilotSw.isLikelySubmitButton = function isLikelySubmitButton(button) {
   return intent === 'submit' || type === 'submit' || SUBMIT_BUTTON_PATTERN.test(text);
 };
 
-CopilotSw.resolveSubmitButton = function resolveSubmitButton(pageContext, workflowPlan = null, session = null) {
+CopilotSw.resolveSubmitButton = function resolveSubmitButton(
+  pageContext,
+  workflowPlan = null,
+  session = null,
+) {
   const candidates = [];
 
   if (workflowPlan?.targetButton) candidates.push(workflowPlan.targetButton);
@@ -24,8 +28,8 @@ CopilotSw.resolveSubmitButton = function resolveSubmitButton(pageContext, workfl
   if (Array.isArray(pageContext?.buttons)) candidates.push(...pageContext.buttons);
 
   const submitLike = candidates.find(
-    btn => btn && (btn.agentId || btn.selector) && CopilotSw.isLikelySubmitButton(btn)
+    (btn) => btn && (btn.agentId || btn.selector) && CopilotSw.isLikelySubmitButton(btn),
   );
 
-  return submitLike || candidates.find(btn => btn && (btn.agentId || btn.selector)) || null;
+  return submitLike || candidates.find((btn) => btn && (btn.agentId || btn.selector)) || null;
 };

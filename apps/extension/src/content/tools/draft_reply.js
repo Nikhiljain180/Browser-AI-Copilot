@@ -12,25 +12,25 @@ function draftReply(toolInput = {}) {
       draft = '',
       context = '',
       tone = 'professional',
-      mode = 'replace',        // 'replace' | 'append' | 'prepend'
-      format = 'plain',        // 'plain' | 'html' | 'markdown'
-      maxLength = null,        // character limit (null = no limit)
-      mentionUser = null,      // @mention to prepend
-      signature = null,        // signature to append
-      autoFocus = true
+      mode = 'replace', // 'replace' | 'append' | 'prepend'
+      format = 'plain', // 'plain' | 'html' | 'markdown'
+      maxLength = null, // character limit (null = no limit)
+      mentionUser = null, // @mention to prepend
+      signature = null, // signature to append
+      autoFocus = true,
     } = toolInput;
 
     // ── 1. Find the reply field ──
     const element = resolveReplyField({
       selector,
       agent_id,
-      agentId
+      agentId,
     });
 
     if (!element) {
       return {
         error: `Reply field not found. Tried: ${selector || 'auto-detect'}`,
-        suggestion: 'Try providing a more specific selector or ensure the reply field is visible'
+        suggestion: 'Try providing a more specific selector or ensure the reply field is visible',
       };
     }
 
@@ -45,7 +45,7 @@ function draftReply(toolInput = {}) {
       mentionUser,
       signature,
       format,
-      fieldInfo
+      fieldInfo,
     });
 
     // ── 4. Apply character limit ──
@@ -59,14 +59,10 @@ function draftReply(toolInput = {}) {
     let contentToSet;
     switch (mode) {
       case 'append':
-        contentToSet = existingContent
-          ? `${existingContent}\n\n${finalText}`
-          : finalText;
+        contentToSet = existingContent ? `${existingContent}\n\n${finalText}` : finalText;
         break;
       case 'prepend':
-        contentToSet = existingContent
-          ? `${finalText}\n\n${existingContent}`
-          : finalText;
+        contentToSet = existingContent ? `${finalText}\n\n${existingContent}` : finalText;
         break;
       case 'replace':
       default:
@@ -93,14 +89,12 @@ function draftReply(toolInput = {}) {
       mode,
       fieldType: fieldInfo.type,
       selector: generateSelector(element),
-      timestamp: Date.now()
+      timestamp: Date.now(),
     };
-
   } catch (error) {
     return { error: error.message };
   }
 }
-
 
 // ═══════════════════════════════════════════════════
 // REPLY FIELD DETECTION
@@ -136,23 +130,28 @@ function resolveReplyField(target) {
     '[placeholder*="message" i]',
 
     // Common reply field patterns
-    '[name*="reply"]', '[name*="comment"]', '[name*="message"]',
-    '[id*="reply"]', '[id*="comment"]', '[id*="message"]',
-    '[data-field*="reply"]', '[data-field*="comment"]',
+    '[name*="reply"]',
+    '[name*="comment"]',
+    '[name*="message"]',
+    '[id*="reply"]',
+    '[id*="comment"]',
+    '[id*="message"]',
+    '[data-field*="reply"]',
+    '[data-field*="comment"]',
 
     // Rich text editors
     '[contenteditable="true"][role="textbox"]',
     '[contenteditable="true"][aria-label]',
-    '.ql-editor',                    // Quill
-    '.ProseMirror',                  // ProseMirror / TipTap
-    '.tox-edit-area__iframe',        // TinyMCE
+    '.ql-editor', // Quill
+    '.ProseMirror', // ProseMirror / TipTap
+    '.tox-edit-area__iframe', // TinyMCE
     '[class*="editor"][contenteditable]',
-    '.DraftEditor-root',             // Draft.js (Facebook)
-    '[data-gramm="false"]',          // Grammarly-enabled fields
+    '.DraftEditor-root', // Draft.js (Facebook)
+    '[data-gramm="false"]', // Grammarly-enabled fields
 
     // Generic textarea (last resort)
     'textarea:not([hidden])',
-    'textarea'
+    'textarea',
   ];
 
   for (const selector of replySelectors) {
@@ -170,7 +169,6 @@ function resolveReplyField(target) {
 
   return null;
 }
-
 
 // ═══════════════════════════════════════════════════
 // FIELD ANALYSIS
@@ -190,7 +188,7 @@ function analyzeReplyField(element) {
     supportsHtml: false,
     currentLength: 0,
     label: '',
-    placeholder: ''
+    placeholder: '',
   };
 
   // ── Textarea ──
@@ -218,8 +216,8 @@ function analyzeReplyField(element) {
     info.supportsHtml = true;
     info.currentLength = (element.innerText || '').length;
     info.label = element.getAttribute('aria-label') || '';
-    info.placeholder = element.getAttribute('data-placeholder') ||
-                        element.getAttribute('aria-placeholder') || '';
+    info.placeholder =
+      element.getAttribute('data-placeholder') || element.getAttribute('aria-placeholder') || '';
 
     // Detect editor type
     if (element.classList.contains('ql-editor')) info.editor = 'quill';
@@ -246,7 +244,6 @@ function analyzeReplyField(element) {
 
   return info;
 }
-
 
 // ═══════════════════════════════════════════════════
 // CONTENT OPERATIONS
@@ -276,7 +273,6 @@ function getFieldContent(element, fieldInfo) {
       return element.value || element.innerText || '';
   }
 }
-
 
 /**
  * Set content into any reply field type
@@ -317,7 +313,6 @@ function setReplyContent(element, content, fieldInfo, format) {
   }
 }
 
-
 /**
  * Set content in contenteditable elements (rich text editors)
  */
@@ -336,12 +331,14 @@ function setContentEditableValue(element, content, format, editorType) {
 
   // Fire events for different editor frameworks
   // Standard input event
-  element.dispatchEvent(new InputEvent('input', {
-    bubbles: true,
-    cancelable: true,
-    inputType: 'insertText',
-    data: content
-  }));
+  element.dispatchEvent(
+    new InputEvent('input', {
+      bubbles: true,
+      cancelable: true,
+      inputType: 'insertText',
+      data: content,
+    }),
+  );
 
   // For React-based editors (Draft.js, Slate)
   element.dispatchEvent(new Event('input', { bubbles: true }));
@@ -363,7 +360,6 @@ function setContentEditableValue(element, content, format, editorType) {
   }
 }
 
-
 /**
  * Set content in iframe-based editors (TinyMCE, CKEditor)
  */
@@ -384,7 +380,6 @@ function setIframeContent(iframe, content, format) {
     throw new Error(`Cannot access iframe content: ${e.message}`);
   }
 }
-
 
 // ═══════════════════════════════════════════════════
 // DRAFT BUILDING
@@ -416,7 +411,6 @@ function buildDraft({ draft, context, tone, mentionUser, signature, format, fiel
   return buildTemplateDraft(context, tone, mentionUser, signature);
 }
 
-
 /**
  * Fallback template builder with better tone support
  */
@@ -428,38 +422,38 @@ function buildTemplateDraft(context, tone, mentionUser, signature) {
     professional: {
       greeting: 'Hi,',
       thankYou: 'Thank you for your message.',
-      closing: 'Best regards,'
+      closing: 'Best regards,',
     },
     formal: {
       greeting: 'Dear Sir/Madam,',
       thankYou: 'Thank you for reaching out to us.',
-      closing: 'Yours sincerely,'
+      closing: 'Yours sincerely,',
     },
     casual: {
       greeting: 'Hey! 👋',
       thankYou: 'Thanks for reaching out!',
-      closing: 'Cheers,'
+      closing: 'Cheers,',
     },
     friendly: {
       greeting: 'Hi there!',
       thankYou: 'Thanks so much for your message!',
-      closing: 'All the best,'
+      closing: 'All the best,',
     },
     empathetic: {
       greeting: 'Hi,',
       thankYou: 'I understand your concern and appreciate you bringing this to our attention.',
-      closing: 'We\'re here to help,'
+      closing: "We're here to help,",
     },
     apologetic: {
       greeting: 'Hi,',
       thankYou: 'I sincerely apologize for the inconvenience.',
-      closing: 'We appreciate your patience,'
+      closing: 'We appreciate your patience,',
     },
     sales: {
       greeting: 'Hi there!',
       thankYou: 'Great to hear from you!',
-      closing: 'Looking forward to hearing from you,'
-    }
+      closing: 'Looking forward to hearing from you,',
+    },
   };
 
   const t = toneMap[tone] || toneMap.professional;
@@ -498,7 +492,6 @@ function buildTemplateDraft(context, tone, mentionUser, signature) {
   return parts.join('\n');
 }
 
-
 // ═══════════════════════════════════════════════════
 // CONTEXT EXTRACTION (for AI to generate better drafts)
 // ═══════════════════════════════════════════════════
@@ -521,34 +514,42 @@ function extractReplyContext(replyFieldSelector) {
     conversationThread: [],
     originalMessage: '',
     sender: '',
-    subject: ''
+    subject: '',
   };
 
   // ── Find the parent container (message thread, comment section, etc.) ──
-  const container = field.closest(
-    'article, .message-thread, .comment-section, .conversation, ' +
-    '.ticket-detail, [class*="thread"], [class*="message"], ' +
-    '[class*="comment"], [class*="reply"], section, .card, .panel'
-  ) || field.parentElement;
+  const container =
+    field.closest(
+      'article, .message-thread, .comment-section, .conversation, ' +
+        '.ticket-detail, [class*="thread"], [class*="message"], ' +
+        '[class*="comment"], [class*="reply"], section, .card, .panel',
+    ) || field.parentElement;
 
   if (!container) return context;
 
   // ── Extract the message being replied to ──
   const messageSelectors = [
-    '.message-content', '.comment-body', '.review-text',
-    '.ticket-content', '.post-body', '.email-body',
-    '[class*="message"]', '[class*="content"]',
-    'blockquote', 'p'
+    '.message-content',
+    '.comment-body',
+    '.review-text',
+    '.ticket-content',
+    '.post-body',
+    '.email-body',
+    '[class*="message"]',
+    '[class*="content"]',
+    'blockquote',
+    'p',
   ];
 
   for (const selector of messageSelectors) {
     const messages = container.querySelectorAll(selector);
     if (messages.length > 0) {
-      context.conversationThread = Array.from(messages).map(msg => ({
+      context.conversationThread = Array.from(messages).map((msg) => ({
         text: sanitizeText(msg.innerText).substring(0, 500),
-        isQuoted: msg.tagName === 'BLOCKQUOTE' ||
-                  msg.classList.contains('quoted') ||
-                  msg.classList.contains('original')
+        isQuoted:
+          msg.tagName === 'BLOCKQUOTE' ||
+          msg.classList.contains('quoted') ||
+          msg.classList.contains('original'),
       }));
       context.originalMessage = context.conversationThread[0]?.text || '';
       break;
@@ -557,9 +558,14 @@ function extractReplyContext(replyFieldSelector) {
 
   // ── Extract sender/author ──
   const senderSelectors = [
-    '.sender', '.author', '.username', '.reviewer-name',
-    '.review-name', '[class*="author"]', '[class*="sender"]',
-    '[class*="name"]'
+    '.sender',
+    '.author',
+    '.username',
+    '.reviewer-name',
+    '.review-name',
+    '[class*="author"]',
+    '[class*="sender"]',
+    '[class*="name"]',
   ];
 
   for (const selector of senderSelectors) {
@@ -571,7 +577,9 @@ function extractReplyContext(replyFieldSelector) {
   }
 
   // ── Extract subject/title ──
-  const subjectEl = container.querySelector('h1, h2, h3, .subject, [class*="subject"], [class*="title"]');
+  const subjectEl = container.querySelector(
+    'h1, h2, h3, .subject, [class*="subject"], [class*="title"]',
+  );
   if (subjectEl) {
     context.subject = sanitizeText(subjectEl.innerText).substring(0, 100);
   }
@@ -584,7 +592,6 @@ function extractReplyContext(replyFieldSelector) {
 
   return context;
 }
-
 
 // ═══════════════════════════════════════════════════
 // UTILITY FUNCTIONS
@@ -612,7 +619,6 @@ function placeCursorAtEnd(element, fieldInfo) {
   }
 }
 
-
 /**
  * Truncate text to limit with a warning
  */
@@ -622,36 +628,37 @@ function truncateWithWarning(text, maxLength) {
   // Try to truncate at a word boundary
   const truncated = text.substring(0, maxLength);
   const lastSpace = truncated.lastIndexOf(' ');
-  
+
   if (lastSpace > maxLength * 0.8) {
     return truncated.substring(0, lastSpace);
   }
-  
+
   return truncated;
 }
-
 
 /**
  * Basic markdown to HTML converter (for rich text editors)
  */
 function markdownToBasicHtml(markdown) {
-  return markdown
-    // Headers
-    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-    // Bold
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    // Italic
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    // Links
-    .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2">$1</a>')
-    // Lists
-    .replace(/^- (.+)$/gm, '<li>$1</li>')
-    .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
-    // Line breaks
-    .replace(/\n\n/g, '</p><p>')
-    .replace(/\n/g, '<br>')
-    // Wrap in paragraph
-    .replace(/^(.+)$/, '<p>$1</p>');
+  return (
+    markdown
+      // Headers
+      .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+      .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+      .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+      // Bold
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      // Italic
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      // Links
+      .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2">$1</a>')
+      // Lists
+      .replace(/^- (.+)$/gm, '<li>$1</li>')
+      .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
+      // Line breaks
+      .replace(/\n\n/g, '</p><p>')
+      .replace(/\n/g, '<br>')
+      // Wrap in paragraph
+      .replace(/^(.+)$/, '<p>$1</p>')
+  );
 }

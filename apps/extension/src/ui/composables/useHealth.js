@@ -33,12 +33,14 @@ export function useHealth() {
 
   function isConnectivityError(message) {
     const normalized = String(message || '').toLowerCase();
-    return normalized.includes('failed to fetch') ||
+    return (
+      normalized.includes('failed to fetch') ||
       normalized.includes('backend') ||
       normalized.includes('networkerror') ||
       normalized.includes('network error') ||
       normalized.includes('llm api error') ||
-      normalized.includes('load failed');
+      normalized.includes('load failed')
+    );
   }
 
   return {

@@ -1,4 +1,8 @@
-import { inferQueryType, normalizeMessageContent, isRetryableLLMError } from '../../src/utils/helpers';
+import {
+  inferQueryType,
+  normalizeMessageContent,
+  isRetryableLLMError,
+} from '../../src/utils/helpers';
 
 describe('inferQueryType', () => {
   it('should return "action" for click-based goals', () => {

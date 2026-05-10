@@ -45,7 +45,9 @@ CopilotSw.setFormSession = function setFormSession(fields = [], active = true, m
   session.awaitingSubmitConfirmation = !!meta.awaitingSubmitConfirmation;
   session.editMode = !!meta.editMode;
   session.editField = meta.editField ? CopilotSw.normalizeFieldRef(meta.editField) : null;
-  session.submitButtons = Array.isArray(meta.submitButtons) ? meta.submitButtons : (session.submitButtons || []);
+  session.submitButtons = Array.isArray(meta.submitButtons)
+    ? meta.submitButtons
+    : session.submitButtons || [];
   session.targetButton = meta.targetButton || session.targetButton || null;
   if (typeof meta.pageUrl === 'string') session.pageUrl = meta.pageUrl;
   return session;
@@ -74,7 +76,7 @@ CopilotSw.fieldKey = function fieldKey(field = {}) {
 
 CopilotSw.buildFieldLookup = function buildFieldLookup(fields = []) {
   const map = new Map();
-  fields.forEach(field => {
+  fields.forEach((field) => {
     if (field?.agentId) map.set(field.agentId, field);
     if (field?.selector) map.set(field.selector, field);
   });
@@ -83,7 +85,7 @@ CopilotSw.buildFieldLookup = function buildFieldLookup(fields = []) {
 
 CopilotSw.buildButtonLookup = function buildButtonLookup(buttons = []) {
   const map = new Map();
-  buttons.forEach(button => {
+  buttons.forEach((button) => {
     if (button?.agentId) map.set(button.agentId, button);
     if (button?.selector) map.set(button.selector, button);
   });

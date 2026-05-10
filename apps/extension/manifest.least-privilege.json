@@ -3,13 +3,7 @@
   "name": "Browser AI Copilot",
   "version": "1.0.0",
   "description": "Production-grade AI Agent for autonomous browser interactions with human-in-the-loop safety gates (least-privilege mode)",
-  "permissions": [
-    "activeTab",
-    "tabs",
-    "scripting",
-    "storage",
-    "sidePanel"
-  ],
+  "permissions": ["activeTab", "tabs", "scripting", "storage", "sidePanel"],
   "action": {
     "default_title": "Browser AI Copilot"
   },
@@ -28,4 +22,3 @@
     "38": "public/icon38.png"
   }
 }
-
