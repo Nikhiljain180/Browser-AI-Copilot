@@ -190,17 +190,45 @@ async function runAgentLoop(goal, tabId) {
       CopilotSw.agentState.iterationCount++;
       CopilotSw.updateAgentStatus('thinking', 'Reasoning about the next step.', true);
 
-      const llmResponse = await CopilotSw.callLLM(
-        goal,
-        CopilotSw.agentState.pageContext,
-        CopilotSw.agentState.chatHistory,
-      );
+      let streamingThought = '';
+      let llmResponse;
+
+      if (typeof CopilotSw.callLLMStream === 'function') {
+        try {
+          llmResponse = await CopilotSw.callLLMStream(
+            goal,
+            CopilotSw.agentState.pageContext,
+            CopilotSw.agentState.chatHistory,
+            (_newChars, fullThought) => {
+              streamingThought = fullThought;
+              CopilotSw.broadcastUI({
+                action: 'updateReasoning',
+                thought: fullThought,
+                streaming: true,
+              });
+            },
+          );
+        } catch (streamError) {
+          console.warn('[Agent] Stream LLM failed, falling back to non-streaming:', streamError.message);
+          llmResponse = await CopilotSw.callLLM(
+            goal,
+            CopilotSw.agentState.pageContext,
+            CopilotSw.agentState.chatHistory,
+          );
+        }
+      } else {
+        llmResponse = await CopilotSw.callLLM(
+          goal,
+          CopilotSw.agentState.pageContext,
+          CopilotSw.agentState.chatHistory,
+        );
+      }
 
       if (!CopilotSw.agentState.isRunning) break;
 
       CopilotSw.broadcastUI({
         action: 'updateReasoning',
-        thought: llmResponse.thought,
+        thought: streamingThought || llmResponse.thought,
         actionName: llmResponse.action,
         actionInput: llmResponse.action_input,
       });

@@ -12,6 +12,10 @@
         {{ liveStatusDetail }}
       </p>
 
+      <div v-if="currentThought" class="thought-reasoning">
+        <span class="thought-reasoning-text">{{ currentThought }}</span>
+      </div>
+
       <transition-group name="thought-stream" tag="div" class="thought-stream">
         <div v-for="line in liveThoughtLines" :key="line.id" class="thought-line">
           <span class="thought-line-dot" />
@@ -33,5 +37,25 @@ defineProps({
   livePhaseLabel: { type: String, default: 'Working' },
   liveStatusDetail: { type: String, default: '' },
   liveThoughtLines: { type: Array, default: () => [] },
+  currentThought: { type: String, default: '' },
 });
 </script>
+
+<style scoped>
+.thought-reasoning {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(124, 58, 237, 0.08);
+  border: 1px solid rgba(124, 58, 237, 0.14);
+}
+
+.thought-reasoning-text {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+</style>

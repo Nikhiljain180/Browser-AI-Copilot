@@ -43,6 +43,7 @@
       :live-phase-label="livePhaseLabel"
       :live-status-detail="liveStatusDetail"
       :live-thought-lines="liveThoughtLines"
+      :current-thought="currentThought"
     />
 
     <div ref="chatEndAnchorRef" class="chat-end-anchor" aria-hidden="true" />
@@ -62,6 +63,7 @@ defineProps({
   livePhaseLabel: { type: String, default: 'Working' },
   liveStatusDetail: { type: String, default: '' },
   liveThoughtLines: { type: Array, default: () => [] },
+  currentThought: { type: String, default: '' },
 });
 
 const chatScrollerRef = ref(null);

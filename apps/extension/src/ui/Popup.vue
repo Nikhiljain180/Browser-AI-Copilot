@@ -19,6 +19,7 @@
       :live-phase-label="agent.livePhaseLabel.value"
       :live-status-detail="agent.liveStatusDetail.value"
       :live-thought-lines="chat.liveThoughtLines.value"
+      :current-thought="agent.currentThought.value"
     />
 
     <ComposerBar
@@ -193,6 +194,13 @@ function handleRuntimeMessage(message) {
 
   if (message.action === 'updateReasoning') {
     agent.currentThought.value = message.thought || '';
+
+    if (message.streaming) {
+      agent.phase.value = 'thinking';
+      agent.phaseDetail.value = 'Reasoning...';
+      return;
+    }
+
     agent.currentAction.value = message.actionName || message.action || '';
     agent.currentActionInput.value = message.actionInput || null;
     agent.phase.value = 'thinking';
@@ -201,6 +209,9 @@ function handleRuntimeMessage(message) {
       : 'Reasoning about the next step.';
     chat.pushLiveThought(agent.polishedStage.value);
     chat.pushLiveThought(agent.polishedAction.value);
+    if (message.thought) {
+      chat.pushLiveThought(message.thought);
+    }
     return;
   }
 

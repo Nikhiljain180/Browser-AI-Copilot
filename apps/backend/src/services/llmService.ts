@@ -128,3 +128,83 @@ export async function callLLMWithTimeout(
 
   throw new Error('LLM call failed after all retries');
 }
+
+export async function streamLLMWithTimeout(
+  messages: ConversationMessage[],
+  timeoutMs: number,
+  onToken: (token: string) => void,
+  options: LLMCallOptions = {},
+): Promise<string> {
+  const provider = config.llm.provider;
+  const model = config.llm.model;
+  const client = getClient();
+
+  let fullContent = '';
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error(`LLM stream timed out after ${timeoutMs}ms`)), timeoutMs);
+  });
+
+  try {
+
+    if (provider === 'openai') {
+      const stream = await (client.chat.completions.create({
+        model,
+        messages: messages.map((m) => ({ role: m.role as 'user' | 'assistant' | 'system', content: m.content })),
+        temperature: options.temperature ?? 0.7,
+        max_tokens: options.max_tokens ?? 1000,
+        stream: true,
+      }) as any);
+
+      const raceRes = await Promise.race([
+        (async () => {
+          for await (const chunk of stream) {
+            const content = chunk.choices?.[0]?.delta?.content || '';
+            if (content) {
+              fullContent += content;
+              onToken(content);
+            }
+          }
+          return fullContent;
+        })(),
+        timeoutPromise,
+      ]);
+      return raceRes;
+    }
+
+    if (provider === 'anthropic') {
+      const stream = await (client.messages.create({
+        model,
+        max_tokens: options.max_tokens ?? 1000,
+        system: messages[0].content,
+        messages: messages.slice(1).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+        stream: true,
+      }) as any);
+
+      const raceRes = await Promise.race([
+        (async () => {
+          for await (const event of stream) {
+            if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+              const text = event.delta.text || '';
+              if (text) {
+                fullContent += text;
+                onToken(text);
+              }
+            }
+          }
+          return fullContent;
+        })(),
+        timeoutPromise,
+      ]);
+      return raceRes;
+    }
+
+    throw new Error(`Unsupported provider: ${provider}`);
+  } catch (error: any) {
+    if (fullContent) {
+      console.warn(`[LLM Stream] Partial content received before error: ${error.message}`);
+      return fullContent;
+    }
+    throw error;
+  }
+}

@@ -299,6 +299,154 @@ function buildAbortError() {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// STREAMING (SSE) — progressive thought extraction
+// ─────────────────────────────────────────────────────────────────────────────
+
+function extractThoughtFromBuffer(buffer) {
+  const startMarker = '"thought"';
+  const thoughtIdx = buffer.indexOf(startMarker);
+  if (thoughtIdx === -1) return null;
+
+  const valueStart = buffer.indexOf('"', thoughtIdx + startMarker.length + 1);
+  if (valueStart === -1) return null;
+
+  let result = '';
+  let i = valueStart + 1;
+  let escaped = false;
+
+  while (i < buffer.length) {
+    const ch = buffer[i];
+    if (escaped) {
+      result += ch;
+      escaped = false;
+      i++;
+      continue;
+    }
+    if (ch === '\\') {
+      result += ch;
+      escaped = true;
+      i++;
+      continue;
+    }
+    if (ch === '"') {
+      break;
+    }
+    result += ch;
+    i++;
+  }
+
+  return result;
+}
+
+CopilotSw.callLLMStream = async function callLLMStream(goal, pageContext, chatHistory, onThought) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), CopilotSw.CONFIG.LLM_TIMEOUT_MS);
+  CopilotSw.activeLLMController = controller;
+
+  try {
+    const focusedPageContext = buildFocusedPageContext(goal, pageContext);
+    const llmHistory = chatHistory.filter((m) => m.role !== 'navigation');
+    const payload = { goal, pageContext: focusedPageContext, chatHistory: llmHistory };
+
+    const response = await fetch(`${CopilotSw.CONFIG.BACKEND_URL}/api/llm/chat/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      let errorMessage = `LLM API error: ${response.statusText}`;
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.error || errorData.message || errorMessage;
+      } catch { /* ignore */ }
+      throw new Error(errorMessage);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let sseBuffer = '';
+    let jsonBuffer = '';
+    let lastThought = '';
+    let lastThoughtBroadcast = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      sseBuffer += decoder.decode(value, { stream: true });
+
+      const lines = sseBuffer.split('\n');
+      sseBuffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6).trim();
+
+        if (data === '[DONE]') continue;
+
+        try {
+          const parsed = JSON.parse(data);
+          if (parsed.token) {
+            jsonBuffer += parsed.token;
+            const thought = extractThoughtFromBuffer(jsonBuffer);
+            if (thought !== null && thought !== lastThought) {
+              lastThought = thought;
+              if (typeof onThought === 'function') {
+                const newChars = lastThoughtBroadcast
+                  ? thought.slice(lastThoughtBroadcast.length)
+                  : thought;
+                onThought(newChars, thought);
+                lastThoughtBroadcast = thought;
+              }
+            }
+          }
+          if (parsed.content) {
+            jsonBuffer = parsed.content;
+          }
+          if (parsed.error) {
+            throw new Error(parsed.error);
+          }
+        } catch (e) {
+          if (e instanceof SyntaxError) continue;
+          throw e;
+        }
+      }
+    }
+
+    // Parse final JSON from buffer
+    if (!jsonBuffer) {
+      throw new Error('Empty response from LLM');
+    }
+
+    let parsed = parseStructuredResponse(jsonBuffer);
+    if (!parsed) {
+      // Try retry with non-streaming fallback
+      const retryPayload = { ...payload, previousResponse: jsonBuffer };
+      const retryData = await fetchLLM('/api/llm/retry', retryPayload, controller.signal);
+      parsed = parseStructuredResponse(retryData.content);
+    }
+
+    if (!parsed) {
+      throw new Error('I got an unexpected model response. Please try again.');
+    }
+
+    return parsed;
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw buildAbortError();
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+    if (CopilotSw.activeLLMController === controller) {
+      CopilotSw.activeLLMController = null;
+    }
+  }
+};
+
 CopilotSw.callLLM = async function callLLM(goal, pageContext, chatHistory) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), CopilotSw.CONFIG.LLM_TIMEOUT_MS);
