@@ -7,16 +7,11 @@ export function useChat() {
   const chatScroller = ref(null);
   const chatEndAnchor = ref(null);
   const liveThoughtLines = ref([]);
-  const showActivity = ref(true);
   let liveThoughtId = 0;
   let chatMutationObserver = null;
   let chatResizeObserver = null;
 
-  const visibleMessages = computed(() => {
-    // Render tool messages as "Activity" cards (professional trace).
-    if (showActivity.value) return messages.value;
-    return messages.value.filter((message) => message.role !== 'tool');
-  });
+  const visibleMessages = computed(() => messages.value);
 
   function pushLiveThought(text) {
     const normalized = String(text || '').trim();
@@ -118,7 +113,6 @@ export function useChat() {
     chatScroller,
     chatEndAnchor,
     liveThoughtLines,
-    showActivity,
     visibleMessages,
     pushLiveThought,
     resetLiveThoughts,

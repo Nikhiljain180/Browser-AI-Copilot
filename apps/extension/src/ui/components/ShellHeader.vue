@@ -1,11 +1,7 @@
 <template>
   <header class="shell-header">
-    <div>
-      <p class="eyebrow">Browser AI Copilot</p>
-      <h1>AI Chat</h1>
-      <p class="header-subtitle">
-        Sidebar assistant for reading pages and filling forms.
-      </p>
+    <div class="shell-header-left">
+      <span class="shell-header-brand">AI Copilot</span>
     </div>
 
     <div class="header-actions">
@@ -21,15 +17,6 @@
         @click="emit('toggle-theme')"
       >
         {{ theme === 'dark' ? 'Light' : 'Dark' }}
-      </button>
-
-      <button
-        class="icon-button"
-        type="button"
-        title="Toggle activity trace"
-        @click="emit('toggle-activity')"
-      >
-        {{ showActivity ? 'Hide activity' : 'Show activity' }}
       </button>
 
       <button
@@ -56,14 +43,13 @@
 </template>
 
 <script setup>
-const emit = defineEmits(['new-chat', 'stop-agent', 'toggle-activity', 'toggle-theme']);
+const emit = defineEmits(['new-chat', 'stop-agent', 'toggle-theme']);
 
 defineProps({
   isRunning: { type: Boolean, default: false },
   offline: { type: Boolean, default: false },
   hasMessages: { type: Boolean, default: false },
   statusLabel: { type: String, default: 'Ready' },
-  showActivity: { type: Boolean, default: true },
   theme: { type: String, default: 'dark' },
 });
 </script>

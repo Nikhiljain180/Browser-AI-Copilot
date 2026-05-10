@@ -5,11 +5,9 @@
       :offline="health.offline.value"
       :has-messages="chat.visibleMessages.value.length > 0"
       :status-label="statusLabel"
-      :show-activity="chat.showActivity.value"
       :theme="theme.theme.value"
       @new-chat="startNewChat"
       @stop-agent="stopAgent"
-      @toggle-activity="toggleActivity"
       @toggle-theme="theme.toggleTheme"
     />
 
@@ -20,8 +18,7 @@
       :visible-messages="chat.visibleMessages.value"
       :live-phase-label="agent.livePhaseLabel.value"
       :live-status-detail="agent.liveStatusDetail.value"
-      :live-thought-lines="chat.showActivity.value ? chat.liveThoughtLines.value : []"
-      :show-activity="chat.showActivity.value"
+      :live-thought-lines="chat.liveThoughtLines.value"
     />
 
     <ComposerBar
@@ -186,13 +183,6 @@ async function startNewChat() {
     chat.resetLiveThoughts();
   } catch (error) {
     showTransientError(error.message || 'Could not start a new chat.');
-  }
-}
-
-function toggleActivity() {
-  chat.showActivity.value = !chat.showActivity.value;
-  if (!chat.showActivity.value) {
-    chat.resetLiveThoughts();
   }
 }
 
