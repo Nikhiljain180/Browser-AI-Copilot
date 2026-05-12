@@ -18,6 +18,22 @@ async function fillOneField(tabId, field, value) {
   );
 }
 
+function getMissingRequiredFields(formsInventory) {
+  const allFields = (formsInventory || []).flatMap((form) => form?.fields || []);
+  return allFields
+    .filter((field) => field && field.visible !== false && !field.disabled)
+    .filter((field) => !CopilotSw.isFileUploadField(field))
+    .filter((field) => field.required === true && field.isFilled !== true)
+    .map((field) =>
+      CopilotSw.normalizeFieldRef({
+        agentId: field.agentId,
+        selector: field.selector,
+        label: field.label || field.name || field.placeholder || field.selector,
+        type: field.type,
+      }),
+    );
+}
+
 async function clearFieldsInForm(formsInventory, tabId) {
   const allFields = (formsInventory || []).flatMap((form) => form?.fields || []);
 
@@ -193,6 +209,22 @@ async function handleExplicitSubmit(goal, pageContext, formsInventory, session, 
     CopilotSw.agentState.chatHistory,
   );
   const workflowPlan = CopilotSw.validateFormWorkflowPlan(plan, formsInventory);
+  const requiredMissing = getMissingRequiredFields(formsInventory);
+
+  if (requiredMissing.length > 0) {
+    CopilotSw.setFormSession(requiredMissing, true, {
+      submitButtons: workflowPlan.submitButtons,
+      targetButton: workflowPlan.targetButton,
+      awaitingSubmitConfirmation: false,
+      editMode: false,
+      editField: null,
+      pageUrl: pageContext?.url,
+    });
+    await CopilotSw.agentState.save();
+
+    const questions = requiredMissing.map((item) => `- ${CopilotSw.askForField(item)}`);
+    return ['I need required fields before submitting:', ...questions].join('\n');
+  }
 
   if (workflowPlan.missingFields.length > 0) {
     CopilotSw.setFormSession(workflowPlan.missingFields, true, {
@@ -389,6 +421,24 @@ async function handleFreshFormFill(goal, pageContext, formsInventory, session, t
 
   // ── Handle submit if requested ──
   if (wantsSubmit) {
+    const requiredMissing = getMissingRequiredFields(formsInventory);
+    if (requiredMissing.length > 0) {
+      CopilotSw.setFormSession(requiredMissing, true, {
+        submitButtons: workflowPlan.submitButtons,
+        targetButton: workflowPlan.targetButton,
+        awaitingSubmitConfirmation: false,
+        editMode: false,
+        editField: null,
+        pageUrl: pageContext?.url,
+      });
+      await CopilotSw.agentState.save();
+
+      const questions = requiredMissing.map((item) => `- ${CopilotSw.askForField(item)}`);
+      return [...responseLines, 'I still need required details before submit:', ...questions]
+        .filter(Boolean)
+        .join('\n\n');
+    }
+
     const submitButton = CopilotSw.resolveSubmitButton(pageContext, workflowPlan, session);
     if (!submitButton?.selector && !submitButton?.agentId) {
       return [...responseLines, 'I could not find a submit button for this form.']

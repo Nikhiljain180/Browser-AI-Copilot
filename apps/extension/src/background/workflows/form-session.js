@@ -15,6 +15,8 @@ const DEFAULT_FORM_SESSION = {
   submitButtons: [],
   targetButton: null,
   pageUrl: null,
+  awaitingExtractionValueConfirmation: false,
+  allowExtractionAutofill: false,
 };
 
 CopilotSw.ensureFormSessionState = function ensureFormSessionState() {
@@ -32,6 +34,10 @@ CopilotSw.ensureFormSessionState = function ensureFormSessionState() {
     if (!Array.isArray(s.submitButtons)) s.submitButtons = [];
     if (!s.targetButton) s.targetButton = null;
     if (typeof s.pageUrl !== 'string') s.pageUrl = null;
+    if (typeof s.awaitingExtractionValueConfirmation !== 'boolean') {
+      s.awaitingExtractionValueConfirmation = false;
+    }
+    if (typeof s.allowExtractionAutofill !== 'boolean') s.allowExtractionAutofill = false;
   }
   return CopilotSw.agentState.formSession;
 };
@@ -50,6 +56,12 @@ CopilotSw.setFormSession = function setFormSession(fields = [], active = true, m
     : session.submitButtons || [];
   session.targetButton = meta.targetButton || session.targetButton || null;
   if (typeof meta.pageUrl === 'string') session.pageUrl = meta.pageUrl;
+  if (typeof meta.awaitingExtractionValueConfirmation === 'boolean') {
+    session.awaitingExtractionValueConfirmation = meta.awaitingExtractionValueConfirmation;
+  }
+  if (typeof meta.allowExtractionAutofill === 'boolean') {
+    session.allowExtractionAutofill = meta.allowExtractionAutofill;
+  }
   return session;
 };
 

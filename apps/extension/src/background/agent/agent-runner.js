@@ -11,6 +11,8 @@ function ensureAgentStateShape() {
       pendingFields: [],
       lastAskedField: null,
       filledFields: {},
+      awaitingExtractionValueConfirmation: false,
+      allowExtractionAutofill: false,
     };
   }
 }
@@ -40,6 +42,18 @@ function getStructuredRowsFromContext(lastContent, pageContext) {
   });
 }
 
+function isMeaningfulValue(value) {
+  return String(value ?? '')
+    .trim()
+    .length > 0;
+}
+
+function hasMeaningfulRows(rows = []) {
+  return rows.some((row) =>
+    Object.values(row || {}).some((value) => isMeaningfulValue(value)),
+  );
+}
+
 function getLastToolContent(chatHistory) {
   const lastToolMessage = [...chatHistory]
     .reverse()
@@ -49,22 +63,30 @@ function getLastToolContent(chatHistory) {
 
 function formatExtractionAnswer(lastContent, pageContext) {
   const extractedRows = getStructuredRowsFromContext(lastContent, pageContext);
-  if (extractedRows.length > 0) {
+  if (extractedRows.length > 0 && hasMeaningfulRows(extractedRows)) {
     return JSON.stringify(extractedRows, null, 2);
   }
   return null;
 }
 
 function formatSummaryAnswer(lastContent, goal) {
-  if (
-    !lastContent?.success ||
-    typeof lastContent.summary !== 'string' ||
-    !lastContent.summary.trim()
-  ) {
+  if (!lastContent?.success) {
     return null;
   }
 
-  const summaryText = lastContent.summary.trim();
+  let summaryText = '';
+  if (typeof lastContent.summary === 'string') {
+    summaryText = lastContent.summary.trim();
+  } else if (Array.isArray(lastContent.summary)) {
+    summaryText = lastContent.summary
+      .filter((item) => typeof item === 'string')
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .join('. ');
+  }
+
+  if (!summaryText) return null;
+
   const lowerGoal = String(goal || '').toLowerCase();
 
   if (lowerGoal.includes('bullet')) {
@@ -82,8 +104,33 @@ function formatSummaryAnswer(lastContent, goal) {
   return summaryText;
 }
 
+function hasMissingRequiredFormFields(pageContext) {
+  const forms = Array.isArray(pageContext?.forms) ? pageContext.forms : [];
+  const allFields = forms.flatMap((form) => form?.fields || []);
+  return allFields.some(
+    (field) =>
+      field &&
+      field.visible !== false &&
+      !field.disabled &&
+      field.required === true &&
+      field.isFilled !== true,
+  );
+}
+
 function formatDataPreviewAnswer(lastContent) {
   if (!lastContent?.success || !Array.isArray(lastContent.data) || lastContent.data.length === 0) {
+    return null;
+  }
+
+  if (
+    lastContent.data.every(
+      (item) =>
+        item &&
+        typeof item === 'object' &&
+        !Array.isArray(item) &&
+        !Object.values(item).some((value) => isMeaningfulValue(value)),
+    )
+  ) {
     return null;
   }
 
@@ -122,6 +169,60 @@ function formatFallbackAnswer(goal, pageContext, chatHistory) {
   return formatPageFallbackAnswer(pageContext);
 }
 
+function formatAssistantAnswer(answer) {
+  if (Array.isArray(answer)) {
+    return answer.filter((item) => typeof item === 'string' && item.trim()).join('\n');
+  }
+  if (typeof answer === 'string') return answer;
+  return '';
+}
+
+async function buildExtractionPreview(tabId) {
+  let extractionPreview = '';
+
+  try {
+    const extractionAnswer = await CopilotSw.callLLM(
+      'find product info',
+      CopilotSw.agentState.pageContext,
+      CopilotSw.agentState.chatHistory,
+    );
+    if (extractionAnswer?.action === 'final_answer') {
+      extractionPreview = formatAssistantAnswer(extractionAnswer.answer);
+    }
+  } catch {
+    /* fallback below */
+  }
+
+  if (!extractionPreview) {
+    extractionPreview = formatFallbackAnswer(
+      'find product info',
+      CopilotSw.agentState.pageContext,
+      CopilotSw.agentState.chatHistory,
+    );
+  }
+
+  if (!extractionPreview || extractionPreview === 'I could not complete the request.') {
+    const summarizeResult = await CopilotSw.executeTool('summarize_page', {}, tabId);
+    if (summarizeResult && !summarizeResult.error) {
+      CopilotSw.agentState.chatHistory.push({
+        role: 'tool',
+        toolName: 'summarize_page',
+        content: summarizeResult,
+        timestamp: Date.now(),
+      });
+      extractionPreview =
+        formatSummaryAnswer(summarizeResult, 'find product info') ||
+        formatDataPreviewAnswer(summarizeResult) ||
+        extractionPreview;
+    }
+  }
+
+  if (!extractionPreview || extractionPreview === 'I could not complete the request.') {
+    return 'I extracted product information.';
+  }
+  return extractionPreview;
+}
+
 function collectRecentTools(chatHistory) {
   const recentTools = [];
   for (let i = chatHistory.length - 1; i >= 0; i--) {
@@ -132,12 +233,70 @@ function collectRecentTools(chatHistory) {
   return [...new Set(recentTools)];
 }
 
+function getFieldByReference(pageContext, actionInput = {}) {
+  const agentId = String(actionInput.agent_id || actionInput.agentId || '').trim();
+  const selector = String(actionInput.selector || '').trim();
+  const forms = Array.isArray(pageContext?.forms) ? pageContext.forms : [];
+  const formFields = forms.flatMap((form) => form?.fields || []);
+  const inputFields = Array.isArray(pageContext?.inputs) ? pageContext.inputs : [];
+  const allFields = [...formFields, ...inputFields];
+  return (
+    allFields.find((field) => field?.agentId && field.agentId === agentId) ||
+    allFields.find((field) => field?.selector && field.selector === selector) ||
+    null
+  );
+}
+
+function isLikelyStructuredPayload(value) {
+  const text = String(value || '').trim();
+  if (!text) return false;
+  if ((text.startsWith('{') && text.endsWith('}')) || (text.startsWith('[') && text.endsWith(']'))) {
+    try {
+      const parsed = JSON.parse(text);
+      return Array.isArray(parsed) || (parsed && typeof parsed === 'object');
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+function shouldBlockStructuredFill(goal, pageContext, llmResponse) {
+  if (llmResponse?.action !== 'fill_input') return null;
+
+  const actionInput = llmResponse.action_input || {};
+  const rawValue = actionInput.value;
+  if (typeof rawValue !== 'string') return null;
+  if (!isLikelyStructuredPayload(rawValue)) return null;
+
+  const normalizedGoal = String(goal || '').toLowerCase();
+  const isCompoundIntent =
+    CopilotSw.isStructuredExtractionGoal(normalizedGoal) &&
+    (CopilotSw.isFormFillGoal(normalizedGoal) || CopilotSw.isFormSubmitGoal(normalizedGoal));
+
+  if (!isCompoundIntent) return null;
+
+  const field = getFieldByReference(pageContext, actionInput);
+  const fieldLabel = field?.label || field?.name || field?.selector || 'the target field';
+  const fieldType = String(field?.type || '').toLowerCase();
+
+  return {
+    success: false,
+    error:
+      `Blocked invalid fill for ${fieldLabel} (${fieldType || 'unknown'}). ` +
+      'Do not paste full extracted JSON into one field. Map single values to matching fields ' +
+      '(for example name/email/message) and ask the user only for missing required fields.',
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // FORM WORKFLOW HANDLER
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function handleFormWorkflow(goal, pageContext, tabId) {
   const normalizedGoal = String(goal || '').toLowerCase();
+  const isExtractionIntent = CopilotSw.isStructuredExtractionGoal(normalizedGoal);
+  const session = CopilotSw.agentState.formSession || {};
 
   const isFormIntent =
     CopilotSw.isFormFillGoal(normalizedGoal) ||
@@ -145,6 +304,59 @@ async function handleFormWorkflow(goal, pageContext, tabId) {
     (typeof CopilotSw.isFormClearGoal === 'function' && CopilotSw.isFormClearGoal(normalizedGoal));
 
   const isFormSessionActive = !!CopilotSw.agentState.formSession?.active;
+  const isCompoundIntent = isExtractionIntent && isFormIntent;
+
+  if (session.awaitingExtractionValueConfirmation) {
+    if (CopilotSw.isSubmitIntent(goal)) {
+      session.awaitingExtractionValueConfirmation = false;
+      session.allowExtractionAutofill = true;
+      await CopilotSw.agentState.save();
+      const useExtractedFlow = await CopilotSw.tryDirectFormWorkflow(
+        'fill the form using extracted values',
+        pageContext,
+        tabId,
+      );
+      const message =
+        useExtractedFlow || 'I will use extracted values where possible and ask for missing fields.';
+      CopilotSw.updateAgentStatus('finalizing', 'Continuing form fill with extracted values.', true);
+      CopilotSw.agentState.chatHistory.push({
+        role: 'assistant',
+        content: message,
+        timestamp: Date.now(),
+      });
+      return { handled: true };
+    }
+
+    if (CopilotSw.isNegativeIntent(goal)) {
+      session.awaitingExtractionValueConfirmation = false;
+      session.allowExtractionAutofill = false;
+      await CopilotSw.agentState.save();
+      const independentFlow = await CopilotSw.tryDirectFormWorkflow('fill the form', pageContext, tabId);
+      const message =
+        independentFlow || 'Okay, I will keep extraction and form fill independent. Let us fill the form now.';
+      CopilotSw.updateAgentStatus('finalizing', 'Continuing independent form fill.', true);
+      CopilotSw.agentState.chatHistory.push({
+        role: 'assistant',
+        content: message,
+        timestamp: Date.now(),
+      });
+      return { handled: true };
+    }
+
+    CopilotSw.updateAgentStatus('finalizing', 'Waiting for extracted-value confirmation.', true);
+    CopilotSw.agentState.chatHistory.push({
+      role: 'assistant',
+      content: 'Do you want me to use extracted values for form fields where possible? (yes/no)',
+      timestamp: Date.now(),
+    });
+    return { handled: true };
+  }
+
+  // Let ReAct own fresh compound goals so it can execute extraction first,
+  // then field filling with tool calls in the same run.
+  if (isCompoundIntent && !isFormSessionActive) {
+    return null;
+  }
 
   const directFormWorkflowAnswer = await CopilotSw.tryDirectFormWorkflow(goal, pageContext, tabId);
 
@@ -221,14 +433,34 @@ async function runAgentLoop(goal, tabId) {
         break;
       }
 
+      if (llmResponse.action === 'request_approval') {
+        CopilotSw.updateAgentStatus('finalizing', 'Waiting for your approval to continue.', true);
+        CopilotSw.agentState.chatHistory.push({
+          role: 'assistant',
+          content:
+            'Approval is required for that step. Please confirm the action you want me to take (for example: "submit the form").',
+          timestamp: Date.now(),
+        });
+        continueLoop = false;
+        break;
+      }
+
       // ── Execute Tool ──
       CopilotSw.updateAgentStatus('acting', `Running tool: ${llmResponse.action}.`, true);
 
-      const toolResult = await CopilotSw.executeToolWithApproval(
-        llmResponse.action,
-        llmResponse.action_input,
-        tabId,
+      const blockedFillResult = shouldBlockStructuredFill(
+        goal,
+        CopilotSw.agentState.pageContext,
+        llmResponse,
       );
+
+      const toolResult =
+        blockedFillResult ||
+        (await CopilotSw.executeToolWithApproval(
+          llmResponse.action,
+          llmResponse.action_input,
+          tabId,
+        ));
 
       if (!CopilotSw.agentState.isRunning) break;
 
@@ -256,6 +488,71 @@ async function runAgentLoop(goal, tabId) {
         action: 'readPage',
         focusArea: null,
       }).catch(() => CopilotSw.agentState.pageContext);
+
+      const normalizedGoal = String(goal || '').toLowerCase();
+      const isExtractionIntent = CopilotSw.isStructuredExtractionGoal(normalizedGoal);
+      const isFillIntent = CopilotSw.isFormFillGoal(normalizedGoal);
+      const isSubmitIntent = CopilotSw.isFormSubmitGoal(normalizedGoal) || CopilotSw.isSubmitIntent(goal);
+      const isCompoundIntent = isExtractionIntent && (isFillIntent || isSubmitIntent);
+      const missingRequiredFields = hasMissingRequiredFormFields(CopilotSw.agentState.pageContext);
+      const shouldAskExtractedValueConfirmation =
+        llmResponse.action === 'extract_data' &&
+        !toolResult?.error &&
+        isExtractionIntent &&
+        isFillIntent &&
+        missingRequiredFields &&
+        !CopilotSw.isFormValueFollowupGoal(goal);
+
+      if (shouldAskExtractedValueConfirmation) {
+        CopilotSw.ensureFormSessionState();
+        CopilotSw.agentState.formSession.awaitingExtractionValueConfirmation = true;
+        CopilotSw.agentState.formSession.allowExtractionAutofill = false;
+        const extractionPreview = await buildExtractionPreview(tabId);
+
+        CopilotSw.updateAgentStatus('finalizing', 'Confirming extracted value usage for form fill.', true);
+        CopilotSw.agentState.chatHistory.push({
+          role: 'assistant',
+          content:
+            `${extractionPreview}\n\nDo you want me to use extracted values for form fields where possible? (yes/no)`,
+          timestamp: Date.now(),
+        });
+        continueLoop = false;
+        break;
+      }
+
+      const shouldProceedToSubmitFlow =
+        llmResponse.action === 'extract_data' &&
+        !toolResult?.error &&
+        isCompoundIntent &&
+        isSubmitIntent &&
+        !isFillIntent;
+
+      if (shouldProceedToSubmitFlow) {
+        const extractionPreview = await buildExtractionPreview(tabId);
+        if (extractionPreview) {
+          CopilotSw.agentState.chatHistory.push({
+            role: 'assistant',
+            content: extractionPreview,
+            timestamp: Date.now(),
+          });
+        }
+
+        const submitFlowAnswer = await CopilotSw.tryDirectFormWorkflow(
+          'submit the form',
+          CopilotSw.agentState.pageContext,
+          tabId,
+        );
+        if (submitFlowAnswer) {
+          CopilotSw.updateAgentStatus('finalizing', 'Proceeding to form submit flow.', true);
+          CopilotSw.agentState.chatHistory.push({
+            role: 'assistant',
+            content: submitFlowAnswer,
+            timestamp: Date.now(),
+          });
+          continueLoop = false;
+          break;
+        }
+      }
 
       await CopilotSw.agentState.save();
 

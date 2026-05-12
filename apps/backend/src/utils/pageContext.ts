@@ -53,6 +53,27 @@ export function summarizePageContext(pageContext: PageContext | null | undefined
     .join('\n\n');
   const sectionsPreview = clamp(sectionsPreviewRaw, sectionsBudget);
 
+  const formsPreviewRaw = (pageContext.forms || [])
+    .slice(0, 5)
+    .map((form, formIndex) => {
+      const formTitle = String(form?.title || '').trim() || `Form ${formIndex + 1}`;
+      const fields = Array.isArray(form?.fields) ? form.fields : [];
+      const fieldLines = fields.slice(0, 12).map((field, fieldIndex) => {
+        const label =
+          String(
+            field?.label || field?.name || field?.placeholder || `Field ${fieldIndex + 1}`,
+          ).trim() || `Field ${fieldIndex + 1}`;
+        const agentId = String(field?.agentId || '').trim() || 'unknown_agent_id';
+        const type = String(field?.type || 'text').trim() || 'text';
+        const required = field?.required ? 'required' : 'optional';
+        const filled = field?.isFilled ? 'filled' : 'empty';
+        return `  - ${label} (${agentId}, ${type}, ${required}, ${filled})`;
+      });
+      return [`- "${formTitle}":`, ...fieldLines].join('\n');
+    })
+    .join('\n');
+  const formsPreview = clamp(formsPreviewRaw, Math.min(3000, Math.floor(maxChars * 0.2)));
+
   return `
 Page: ${pageContext.title || pageContext.url}
 URL: ${pageContext.url}
@@ -62,6 +83,9 @@ Key Elements:
 - Forms: ${pageContext.forms?.length || 0} form(s)
 - Links: ${pageContext.links?.length || 0} link(s)
 - Tables: ${pageContext.tables?.length || 0} table(s)
+
+Forms Field Inventory (up to 5 forms, 12 fields each):
+${formsPreview || 'None'}
 
 Links (up to 20):
 - ${linksPreview || 'None'}
