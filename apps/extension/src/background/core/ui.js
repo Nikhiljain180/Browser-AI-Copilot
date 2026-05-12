@@ -4,8 +4,16 @@
 // UI COMMUNICATION
 // ─────────────────────────────────────────────────────────────────────────────
 
+function withTabScope(message) {
+  const tabId = CopilotSw.getActiveTabId?.();
+  if (tabId == null || tabId === undefined) {
+    return message;
+  }
+  return { ...message, tabId };
+}
+
 CopilotSw.broadcastUI = function broadcastUI(message) {
-  chrome.runtime.sendMessage(message).catch(() => {
+  chrome.runtime.sendMessage(withTabScope(message)).catch(() => {
     // Silently ignore — UI may not be open
   });
 };
@@ -13,7 +21,7 @@ CopilotSw.broadcastUI = function broadcastUI(message) {
 CopilotSw.updateAgentStatus = function updateAgentStatus(
   phase,
   detail,
-  isRunning = CopilotSw.agentState.isRunning
+  isRunning = CopilotSw.agentState.isRunning,
 ) {
   CopilotSw.broadcastUI({
     action: 'updateStatus',

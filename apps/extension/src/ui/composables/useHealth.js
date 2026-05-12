@@ -1,13 +1,15 @@
 import { ref } from 'vue';
 
+const DEFAULT_BACKEND_URL = 'http://localhost:3000';
+
 export function useHealth() {
   const offline = ref(false);
   let healthCheckIntervalId = null;
 
   async function checkBackendHealth() {
     try {
-      const backendURL = 'http://127.0.0.1:3000/api/health';
-      const response = await fetch(backendURL, {
+      const baseUrl = window.__BACKEND_URL__ || DEFAULT_BACKEND_URL;
+      const response = await fetch(`${baseUrl}/api/health`, {
         method: 'GET',
       });
       offline.value = !response.ok;
@@ -33,12 +35,14 @@ export function useHealth() {
 
   function isConnectivityError(message) {
     const normalized = String(message || '').toLowerCase();
-    return normalized.includes('failed to fetch') ||
+    return (
+      normalized.includes('failed to fetch') ||
       normalized.includes('backend') ||
       normalized.includes('networkerror') ||
       normalized.includes('network error') ||
       normalized.includes('llm api error') ||
-      normalized.includes('load failed');
+      normalized.includes('load failed')
+    );
   }
 
   return {

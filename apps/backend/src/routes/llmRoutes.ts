@@ -5,7 +5,7 @@ import { LLMStreamRequestBody } from '../types';
 
 const router = Router();
 
-router.post('/stream', async (req: Request<{}, {}, LLMStreamRequestBody>, res: Response) => {
+router.post('/chat', async (req: Request<{}, {}, LLMStreamRequestBody>, res: Response) => {
   try {
     const { goal, pageContext, chatHistory } = req.body;
     const timeout = config.llm.timeoutMs;

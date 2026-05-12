@@ -27,53 +27,92 @@ importScripts(
   './agent/agent-runner.js',
 );
 
-function handleStopAgent() {
-  CopilotSw.agentState.isRunning = false;
-
-  if (CopilotSw.activeLLMController) {
-    CopilotSw.activeLLMController.abort();
-    CopilotSw.activeLLMController = null;
+function requireTabId(request) {
+  const raw = request?.tabId;
+  if (raw === undefined || raw === null) {
+    throw new Error('Missing tab id');
   }
+  const id = Number(raw);
+  if (Number.isNaN(id)) {
+    throw new Error('Invalid tab id');
+  }
+  return id;
+}
 
-  Object.keys(CopilotSw.approvalPromises || {}).forEach((approvalId) => {
+async function handleStopAgent(tabId) {
+  await CopilotSw.abortInFlightAgentRun();
+  await CopilotSw.setActiveTabSession(tabId);
+
+  const approvalIds = Object.keys(CopilotSw.approvalPromises || {});
+  approvalIds.forEach((approvalId) => {
     CopilotSw.approvalPromises[approvalId](false);
     delete CopilotSw.approvalPromises[approvalId];
     delete CopilotSw.pendingApprovals[approvalId];
   });
 
-  CopilotSw.agentState.save();
+  CopilotSw.agentState.isRunning = false;
+  await CopilotSw.persistActiveTabSession();
   CopilotSw.updateAgentStatus('stopped', 'Agent run stopped.', false);
-  return Promise.resolve({ success: true });
+  return { success: true };
 }
 
-function handleGetChatHistory() {
-  return CopilotSw.agentState.load().then(() => ({
+async function handleGetChatHistory(tabId) {
+  await CopilotSw.setActiveTabSession(tabId);
+  return {
     history: CopilotSw.agentState.chatHistory,
     isRunning: CopilotSw.agentState.isRunning,
     iteration: CopilotSw.agentState.iterationCount,
     maxIterations: CopilotSw.CONFIG.MAX_REACT_ITERATIONS,
     currentGoal: CopilotSw.agentState.currentGoal,
-  }));
+  };
 }
+
+chrome.runtime.onSuspend.addListener(() => {
+  void (async () => {
+    if (CopilotSw.agentState?.isRunning) {
+      CopilotSw.agentState.isRunning = false;
+    }
+    await CopilotSw.persistActiveTabSession?.();
+  })();
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  void CopilotSw.removeTabSession(tabId);
+});
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   const handlers = {
-    startAgent: () => CopilotSw.handleStartAgent(request.goal),
-    stopAgent: () => handleStopAgent(),
-    clearChat: () => CopilotSw.clearAgentSession(),
+    startAgent: async () => {
+      const tabId = requireTabId(request);
+      return CopilotSw.handleStartAgent(request.goal, tabId);
+    },
+    stopAgent: async () => {
+      const tabId = requireTabId(request);
+      return handleStopAgent(tabId);
+    },
+    clearChat: async () => {
+      const tabId = requireTabId(request);
+      return CopilotSw.clearAgentSession(tabId);
+    },
     approveAction: () => CopilotSw.handleApproveAction(request.actionId),
     rejectAction: () => CopilotSw.handleRejectAction(request.actionId),
-    getChatHistory: () => handleGetChatHistory(),
+    getChatHistory: async () => {
+      const tabId = requireTabId(request);
+      return handleGetChatHistory(tabId);
+    },
     pageContextChanged: async () => {
-      // SPA navigation detected — re-inject content scripts so function
-      // definitions survive the new page context, then update stored pageContext.
       const tabId = sender?.tab?.id;
       if (!tabId) return { ok: true };
       try {
         await CopilotSw.ensureContentScriptInjected(tabId);
-        const pageContext = await CopilotSw.sendMessageToTab(tabId, { action: 'readPage', focusArea: null });
-        CopilotSw.agentState.pageContext = pageContext;
-      } catch (_) { /* tab may be restricted or navigating */ }
+        const pageContext = await CopilotSw.sendMessageToTab(tabId, {
+          action: 'readPage',
+          focusArea: null,
+        });
+        await CopilotSw.patchTabSessionPageContext(tabId, pageContext);
+      } catch (_) {
+        /* tab may be restricted or navigating */
+      }
       return { ok: true };
     },
   };
@@ -88,7 +127,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   handler()
     .then(sendResponse)
-    .catch(err => {
+    .catch((err) => {
       console.error(`[SW] Error in ${request.action}:`, err);
       sendResponse({ error: err.message });
     });

@@ -1,4 +1,8 @@
-import { inferQueryType, normalizeMessageContent, isRetryableLLMError } from '../../src/utils/helpers';
+import {
+  inferQueryType,
+  normalizeMessageContent,
+  isRetryableLLMError,
+} from '../../src/utils/helpers';
 
 describe('inferQueryType', () => {
   it('should return "action" for click-based goals', () => {
@@ -15,6 +19,28 @@ describe('inferQueryType', () => {
 
   it('should return "informational" for generic questions', () => {
     expect(inferQueryType('what is this page about?')).toBe('informational');
+  });
+
+  it('should return "action" for structured analysis questions', () => {
+    expect(inferQueryType('What is the most popular product?')).toBe('action');
+    expect(inferQueryType('Which products are low in stock?')).toBe('action');
+    expect(inferQueryType('What is the total value of all delivered orders?')).toBe('action');
+    expect(inferQueryType('Who reviewed the 4K Ultra Monitor?')).toBe('action');
+  });
+
+  it('should return "action" for find/create order style goals without fill keyword', () => {
+    expect(
+      inferQueryType(
+        "Find the top-rated product, get the reviewer's name, and create an order for that reviewer with 3 units",
+      ),
+    ).toBe('action');
+  });
+
+  it('should return "action" for catalog fetch/list phrasing so tools run instead of pure chat', () => {
+    expect(inferQueryType('fetch the product details')).toBe('action');
+    expect(inferQueryType('list all products on this page')).toBe('action');
+    expect(inferQueryType('browse the catalog')).toBe('action');
+    expect(inferQueryType('all products')).toBe('action');
   });
 });
 

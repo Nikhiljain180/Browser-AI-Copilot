@@ -33,7 +33,7 @@ export interface FormField {
 
 export interface FormPlan {
   fields: FormField[];
-  missing_required: Array<{
+  missing_fields: Array<{
     agent_id: string;
     label: string;
     question: string;
@@ -60,6 +60,16 @@ export interface FormPlanRequestBody {
   chatHistory?: ChatMessage[];
 }
 
+export interface IntentPlan {
+  needs_extraction: boolean;
+  needs_form_fill: boolean;
+  needs_submit: boolean;
+  needs_clear: boolean;
+  needs_clarification: boolean;
+  clarification_question: string;
+  reason: string;
+}
+
 export interface ConfigUpdateRequestBody {
   provider?: string;
   model?: string;
@@ -74,5 +84,5 @@ export type ErrorRequestHandler = (
   err: Error,
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => void;

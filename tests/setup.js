@@ -4,9 +4,11 @@
  */
 
 const testApi = globalThis.vi || globalThis.jest;
-const mockFn = testApi ? testApi.fn.bind(testApi) : (() => {
-  throw new Error('No test mocking API available');
-});
+const mockFn = testApi
+  ? testApi.fn.bind(testApi)
+  : () => {
+      throw new Error('No test mocking API available');
+    };
 
 // Mock Chrome APIs
 global.chrome = {
@@ -32,7 +34,7 @@ global.chrome = {
 // Mock DOM APIs
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
-  value: mockFn().mockImplementation(query => ({
+  value: mockFn().mockImplementation((query) => ({
     matches: false,
     media: query,
     onchange: null,

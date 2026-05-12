@@ -17,7 +17,9 @@ CopilotSw.parseJsonResponse = function parseJsonResponse(content) {
   // Direct parse
   try {
     return JSON.parse(source);
-  } catch { /* not valid JSON directly */ }
+  } catch {
+    /* not valid JSON directly */
+  }
 
   // Extract first JSON-like block
   const match = source.match(/\{[\s\S]*\}/);

@@ -15,16 +15,19 @@ export function summarizePageContext(pageContext: PageContext | null | undefined
   const sectionsBudget = Math.min(6000, Math.floor(maxChars * 0.35));
   const linksBudget = Math.min(2000, Math.floor(maxChars * 0.15));
 
-  const buttonsPreview = (pageContext.buttons || [])
-    .map(button => String(button?.text || '').trim())
-    .filter(Boolean)
-    .slice(0, 12)
-    .map(text => `"${text}"`)
-    .join(', ') || 'None';
+  const buttonsPreview =
+    (pageContext.buttons || [])
+      .map((button) => String(button?.text || '').trim())
+      .filter(Boolean)
+      .slice(0, 12)
+      .map((text) => `"${text}"`)
+      .join(', ') || 'None';
 
   const linksPreviewRaw = (pageContext.links || [])
-    .map(link => {
-      const text = String(link?.text || '').trim().replace(/\s+/g, ' ');
+    .map((link) => {
+      const text = String(link?.text || '')
+        .trim()
+        .replace(/\s+/g, ' ');
       const href = String(link?.href || '').trim();
       if (!href) return null;
       return text ? `${text} (${href})` : href;
@@ -40,7 +43,7 @@ export function summarizePageContext(pageContext: PageContext | null | undefined
   const sections = Array.isArray(pageContext.sections) ? pageContext.sections : [];
   const sectionsPreviewRaw = sections
     .slice(0, 10)
-    .map(section => {
+    .map((section) => {
       const title = String(section?.title || '').trim();
       const text = String(section?.text || '').trim();
       if (!title || !text) return null;
@@ -49,6 +52,43 @@ export function summarizePageContext(pageContext: PageContext | null | undefined
     .filter(Boolean)
     .join('\n\n');
   const sectionsPreview = clamp(sectionsPreviewRaw, sectionsBudget);
+
+  type ContextField = {
+    label?: string;
+    name?: string;
+    placeholder?: string;
+    agentId?: string;
+    type?: string;
+    required?: boolean;
+    isFilled?: boolean;
+  };
+  type ContextForm = {
+    title?: string;
+    fields?: ContextField[];
+  };
+
+  const forms = Array.isArray(pageContext.forms) ? (pageContext.forms as ContextForm[]) : [];
+
+  const formsPreviewRaw = forms
+    .slice(0, 5)
+    .map((form: ContextForm, formIndex: number) => {
+      const formTitle = String(form?.title || '').trim() || `Form ${formIndex + 1}`;
+      const fields = Array.isArray(form?.fields) ? form.fields : [];
+      const fieldLines = fields.slice(0, 12).map((field: ContextField, fieldIndex: number) => {
+        const label =
+          String(
+            field?.label || field?.name || field?.placeholder || `Field ${fieldIndex + 1}`,
+          ).trim() || `Field ${fieldIndex + 1}`;
+        const agentId = String(field?.agentId || '').trim() || 'unknown_agent_id';
+        const type = String(field?.type || 'text').trim() || 'text';
+        const required = field?.required ? 'required' : 'optional';
+        const filled = field?.isFilled ? 'filled' : 'empty';
+        return `  - ${label} (${agentId}, ${type}, ${required}, ${filled})`;
+      });
+      return [`- "${formTitle}":`, ...fieldLines].join('\n');
+    })
+    .join('\n');
+  const formsPreview = clamp(formsPreviewRaw, Math.min(3000, Math.floor(maxChars * 0.2)));
 
   return `
 Page: ${pageContext.title || pageContext.url}
@@ -59,6 +99,9 @@ Key Elements:
 - Forms: ${pageContext.forms?.length || 0} form(s)
 - Links: ${pageContext.links?.length || 0} link(s)
 - Tables: ${pageContext.tables?.length || 0} table(s)
+
+Forms Field Inventory (up to 5 forms, 12 fields each):
+${formsPreview || 'None'}
 
 Links (up to 20):
 - ${linksPreview || 'None'}

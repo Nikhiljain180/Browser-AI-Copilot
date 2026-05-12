@@ -15,7 +15,9 @@ CopilotSw.classifyAction = function classifyAction(toolName, toolInput) {
     return {
       requiresApproval: true,
       riskLevel: 'high',
-      actionDescription: description || `Click "${toolInput?.selector || 'element'}" — this looks like a destructive submit/delete action.`,
+      actionDescription:
+        description ||
+        `Click "${toolInput?.selector || 'element'}" — this looks like a destructive submit/delete action.`,
     };
   }
 
@@ -42,14 +44,18 @@ const TOOL_RETRY_DELAY_MS = 250;
 const MAX_TOOL_ATTEMPTS = 2;
 
 function delay(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function generateApprovalId() {
   return `${Date.now()}_${Math.random().toString(36).slice(2)}`;
 }
 
-CopilotSw.executeToolWithApproval = async function executeToolWithApproval(toolName, toolInput, tabId) {
+CopilotSw.executeToolWithApproval = async function executeToolWithApproval(
+  toolName,
+  toolInput,
+  tabId,
+) {
   const classification = CopilotSw.classifyAction(toolName, toolInput);
 
   if (!classification.requiresApproval) {
@@ -87,6 +93,16 @@ CopilotSw.executeToolWithApproval = async function executeToolWithApproval(toolN
 };
 
 CopilotSw.executeTool = async function executeTool(toolName, toolInput, tabId) {
+  let payload = toolInput;
+  if (
+    toolName === 'click_element' &&
+    toolInput &&
+    typeof toolInput === 'object' &&
+    typeof CopilotSw.sanitizeClickElementInput === 'function'
+  ) {
+    payload = CopilotSw.sanitizeClickElementInput({ ...toolInput });
+  }
+
   let lastError = null;
 
   for (let attempt = 1; attempt <= MAX_TOOL_ATTEMPTS; attempt += 1) {
@@ -98,7 +114,7 @@ CopilotSw.executeTool = async function executeTool(toolName, toolInput, tabId) {
       const result = await CopilotSw.sendMessageToTab(tabId, {
         action: 'executeTool',
         toolName,
-        toolInput,
+        toolInput: payload,
       });
 
       if (result && !result.error) {

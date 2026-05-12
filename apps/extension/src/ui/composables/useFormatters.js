@@ -20,17 +20,25 @@ export function useFormatters() {
     return escapeHtml(value).replace(/`/g, '&#96;');
   }
 
+  function isSafeUrl(url) {
+    const allowedProtocols = ['http:', 'https:', 'mailto:'];
+    try {
+      const parsed = new URL(url, window.location.origin);
+      return allowedProtocols.includes(parsed.protocol) || parsed.protocol === '';
+    } catch {
+      return false;
+    }
+  }
+
   function formatRichText(content) {
     const escaped = escapeHtml(content);
 
-    // Markdown links: [label](any-url) — supports https, http, file, relative, etc.
-    const withMarkdownLinks = escaped.replace(
-      /\[([^\]]+?)\]\(([^)\s]+)\)/g,
-      (_, label, url) => {
-        const safeUrl = escapeHtmlAttribute(url);
-        return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${label}</a>`;
-      }
-    );
+    // Markdown links: [label](url)
+    const withMarkdownLinks = escaped.replace(/\[([^\]]+?)\]\(([^)\s]+)\)/g, (_, label, url) => {
+      if (!isSafeUrl(url)) return `[${label}](${escapeHtmlAttribute(url)})`;
+      const safeUrl = escapeHtmlAttribute(url);
+      return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+    });
 
     // Bare URLs (http/https only, to avoid false positives)
     const withBareLinks = withMarkdownLinks.replace(
@@ -38,41 +46,42 @@ export function useFormatters() {
       (_, url, trailing) => {
         const safeUrl = escapeHtmlAttribute(url);
         return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${url}</a>${trailing || ''}`;
-      }
+      },
     );
 
-    return withBareLinks
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\n/g, '<br>');
+    return withBareLinks.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
   }
 
   function formatColumnLabel(column) {
     return String(column || '')
       .split('_')
       .filter(Boolean)
-      .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
       .join(' ');
   }
 
   function getMessageList(content) {
-    if (Array.isArray(content) && content.every(item => typeof item === 'string')) {
+    if (Array.isArray(content) && content.every((item) => typeof item === 'string')) {
       return content;
     }
 
     if (typeof content !== 'string') return [];
 
-    const normalized = content.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+    const normalized = content
+      .trim()
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```$/, '');
 
     // Try JSON array of strings
     try {
       const parsed = JSON.parse(normalized);
-      if (Array.isArray(parsed) && parsed.every(item => typeof item === 'string')) {
+      if (Array.isArray(parsed) && parsed.every((item) => typeof item === 'string')) {
         return parsed;
       }
     } catch {
       const compact = normalized.replace(/\r/g, '');
       if (compact.startsWith('[') && compact.endsWith(']')) {
-        const matches = [...compact.matchAll(/"([^"\n]+)"/g)].map(match => match[1]);
+        const matches = [...compact.matchAll(/"([^"\n]+)"/g)].map((match) => match[1]);
         if (matches.length > 0) return matches;
       }
     }
@@ -97,10 +106,10 @@ export function useFormatters() {
 
     // Heuristic: multi-line content where each line has similar delimiter pattern
     // (e.g., "Name - Category - $Price - Stock: N - [Link](url)")
-    const nonEmptyLines = lines.map(l => l.trim()).filter(Boolean);
+    const nonEmptyLines = lines.map((l) => l.trim()).filter(Boolean);
     if (nonEmptyLines.length >= 2) {
       const delimiterPattern = /\s+-\s+/;
-      const linesWithDelimiters = nonEmptyLines.filter(l => delimiterPattern.test(l));
+      const linesWithDelimiters = nonEmptyLines.filter((l) => delimiterPattern.test(l));
       // If most lines follow the pattern, treat as a list
       if (linesWithDelimiters.length >= Math.ceil(nonEmptyLines.length * 0.6)) {
         return nonEmptyLines;
@@ -113,16 +122,16 @@ export function useFormatters() {
   function getStructuredTable(content) {
     const parsed = parseStructuredContent(content);
     if (!Array.isArray(parsed) || parsed.length === 0) return null;
-    if (!parsed.every(item => item && typeof item === 'object' && !Array.isArray(item))) {
+    if (!parsed.every((item) => item && typeof item === 'object' && !Array.isArray(item))) {
       return null;
     }
 
-    const columns = [...new Set(parsed.flatMap(row => Object.keys(row)))];
+    const columns = [...new Set(parsed.flatMap((row) => Object.keys(row)))];
     if (columns.length === 0) return null;
 
-    const rows = parsed.map(row => {
+    const rows = parsed.map((row) => {
       const normalizedRow = {};
-      columns.forEach(column => {
+      columns.forEach((column) => {
         const value = row[column];
         normalizedRow[column] =
           value == null ? '' : typeof value === 'object' ? JSON.stringify(value) : String(value);
@@ -137,7 +146,10 @@ export function useFormatters() {
     if (Array.isArray(content)) return content;
     if (typeof content !== 'string') return null;
 
-    const normalized = content.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+    const normalized = content
+      .trim()
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```$/, '');
 
     try {
       return JSON.parse(normalized);

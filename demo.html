@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TechVault - Premium Electronics Store</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0a0a1a;
+            color: #e0e0e0;
+            min-height: 100vh;
+        }
+
+        /* ========== NAVBAR ========== */
+        .navbar {
+            background: rgba(15, 15, 30, 0.95);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            padding: 0 40px;
+            height: 64px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .navbar-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1.3rem;
+            font-weight: 800;
+            color: #fff;
+        }
+
+        .navbar-brand .logo-icon {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+        }
+
+        .navbar-links {
+            display: flex;
+            align-items: center;
+            gap: 28px;
+        }
+
+        .navbar-links a {
+            color: #808090;
+            text-decoration: none;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .navbar-links a:hover { color: #fff; }
+        .navbar-links a.active { color: #667eea; }
+
+        .navbar-actions {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .cart-btn {
+            position: relative;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 8px 12px;
+            color: #fff;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+
+        .cart-count {
+            position: absolute;
+            top: -6px;
+            right: -6px;
+            background: #e74c3c;
+            color: #fff;
+            font-size: 0.6rem;
+            font-weight: 700;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .user-avatar {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #fff;
+            cursor: pointer;
+        }
+
+        /* ========== HERO BANNER ========== */
+        .hero {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.15), rgba(118, 75, 162, 0.1));
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            padding: 50px 40px;
+            text-align: center;
+        }
+
+        .hero h1 {
+            font-size: 2.4rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #fff, #a0b0ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 12px;
+        }
+
+        .hero p {
+            color: #808090;
+            font-size: 1.05rem;
+            max-width: 600px;
+            margin: 0 auto 24px;
+            line-height: 1.6;
+        }
+
+        .hero-stats {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin-top: 24px;
+        }
+
+        .hero-stat {
+            text-align: center;
+        }
+
+        .hero-stat .value {
+            font-size: 1.6rem;
+            font-weight: 800;
+            color: #fff;
+        }
+
+        .hero-stat .label {
+            font-size: 0.7rem;
+            color: #606080;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 4px;
+        }
+
+        /* ========== MAIN CONTAINER ========== */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 30px 20px;
+        }
+
+        /* ========== SECTION HEADERS ========== */
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            margin-top: 10px;
+        }
+
+        .section-header h2 {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .section-header .count-badge {
+            background: rgba(102, 126, 234, 0.15);
+            color: #667eea;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+
+        /* ========== PRODUCT TABLE ========== */
+        .data-table-wrapper {
+            margin-bottom: 40px;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: rgba(255,255,255,0.03);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .data-table thead th {
+            padding: 14px 16px;
+            text-align: left;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: #808090;
+            font-weight: 600;
+            background: rgba(255,255,255,0.03);
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .data-table tbody td {
+            padding: 14px 16px;
+            font-size: 0.85rem;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+        }
+
+        .data-table tbody tr:hover {
+            background: rgba(102, 126, 234, 0.04);
+        }
+
+        .data-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .order-id {
+            font-family: 'JetBrains Mono', monospace;
+            color: #667eea;
+            font-weight: 600;
+            font-size: 0.8rem;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+
+        .status-delivered { background: rgba(39,174,96,0.15); color: #27ae60; }
+        .status-shipped { background: rgba(52,152,219,0.15); color: #3498db; }
+        .status-processing { background: rgba(243,156,18,0.15); color: #f39c12; }
+        .status-pending { background: rgba(155,89,182,0.15); color: #9b59b6; }
+
+        .stock-high { color: #27ae60; }
+        .stock-medium { color: #f39c12; }
+        .stock-low { color: #e74c3c; font-weight: 600; }
+
+        /* ========== CONTENT GRID ========== */
+        .content-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin-bottom: 40px;
+        }
+
+        @media (max-width: 768px) {
+            .content-grid { grid-template-columns: 1fr; }
+        }
+
+        .panel {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 16px;
+            padding: 24px;
+        }
+
+        .panel-title {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* ========== REVIEWS TABLE ========== */
+        .review-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .review-table thead th {
+            padding: 10px 12px;
+            text-align: left;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: #808090;
+            font-weight: 600;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .review-table tbody td {
+            padding: 12px;
+            font-size: 0.82rem;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            vertical-align: top;
+        }
+
+        .review-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .reviewer-name {
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .reviewer-meta {
+            font-size: 0.7rem;
+            color: #606080;
+        }
+
+        .review-text {
+            font-size: 0.82rem;
+            color: #b0b0c0;
+            line-height: 1.5;
+            font-style: italic;
+        }
+
+        .review-stars {
+            color: #f39c12;
+            font-size: 0.85rem;
+        }
+
+        /* ========== ORDER FORM ========== */
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #a0a0b0;
+            margin-bottom: 6px;
+        }
+
+        .form-group label .required {
+            color: #e74c3c;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px 14px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 10px;
+            color: #fff;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.88rem;
+            transition: all 0.3s ease;
+        }
+
+        .form-group input::placeholder,
+        .form-group textarea::placeholder {
+            color: #505060;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.12);
+        }
+
+        .form-group select option {
+            background: #1a1a2e;
+            color: #fff;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 10px;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-submit {
+            background: linear-gradient(135deg, #27ae60, #2ecc71);
+            color: #fff;
+        }
+
+        .btn-submit:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(39,174,96,0.3);
+        }
+
+        .btn-secondary {
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.12);
+            color: #a0a0b0;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255,255,255,0.1);
+            color: #fff;
+        }
+
+        /* ========== SUPPORT SECTION ========== */
+        .support-section {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 40px;
+        }
+
+        .ticket-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            padding: 14px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .ticket-item:last-child { border-bottom: none; }
+
+        .ticket-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+            flex-shrink: 0;
+        }
+
+        .ticket-icon.urgent { background: rgba(231,76,60,0.15); }
+        .ticket-icon.normal { background: rgba(52,152,219,0.15); }
+        .ticket-icon.low { background: rgba(39,174,96,0.15); }
+
+        .ticket-content h4 {
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 4px;
+        }
+
+        .ticket-content p {
+            font-size: 0.8rem;
+            color: #808090;
+            line-height: 1.5;
+        }
+
+        .ticket-content .ticket-meta {
+            font-size: 0.7rem;
+            color: #505060;
+            margin-top: 6px;
+        }
+
+        /* ========== FOOTER ========== */
+        .footer {
+            text-align: center;
+            padding: 30px;
+            border-top: 1px solid rgba(255,255,255,0.05);
+            color: #505060;
+            font-size: 0.8rem;
+        }
+
+        .footer a {
+            color: #667eea;
+            text-decoration: none;
+        }
+
+        /* ========== TOAST ========== */
+        .toast-notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 14px 24px;
+            background: rgba(39,174,96,0.95);
+            color: #fff;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            z-index: 2000;
+            display: none;
+            box-shadow: 0 8px 32px rgba(39,174,96,0.3);
+        }
+
+        .toast-notification.show {
+            display: block;
+            animation: toastIn 0.3s ease;
+        }
+
+        @keyframes toastIn {
+            from { opacity: 0; transform: translateX(40px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- NAVBAR -->
+    <nav class="navbar" role="navigation" aria-label="Main navigation">
+        <div class="navbar-brand">
+            <div class="logo-icon">⚡</div>
+            TechVault
+        </div>
+        <div class="navbar-links">
+            <a href="#products-section" class="active">Products</a>
+            <a href="#orders-section">Orders</a>
+            <a href="#reviews-section">Reviews</a>
+            <a href="#support-section">Support</a>
+        </div>
+        <div class="navbar-actions">
+            <button class="cart-btn" aria-label="Shopping cart with 3 items">
+                🛒
+                <span class="cart-count" id="cart-count">3</span>
+            </button>
+            <div class="user-avatar" title="John Doe" aria-label="User: John Doe">JD</div>
+        </div>
+    </nav>
+
+    <!-- HERO -->
+    <section class="hero" aria-label="Store overview">
+        <h1>Premium Tech, Delivered Fast</h1>
+        <p>Explore our curated collection of high-quality electronics, peripherals, and accessories. Free express shipping on orders over $100.</p>
+        <div class="hero-stats">
+            <div class="hero-stat">
+                <div class="value">2,847</div>
+                <div class="label">Products Sold</div>
+            </div>
+            <div class="hero-stat">
+                <div class="value">4.8★</div>
+                <div class="label">Avg Rating</div>
+            </div>
+            <div class="hero-stat">
+                <div class="value">98%</div>
+                <div class="label">Satisfaction</div>
+            </div>
+            <div class="hero-stat">
+                <div class="value">24hr</div>
+                <div class="label">Avg Delivery</div>
+            </div>
+        </div>
+    </section>
+
+    <div class="container">
+
+        <!-- ═══════════════════════════════════════ -->
+        <!-- PRODUCTS TABLE (structured for easy extraction) -->
+        <!-- ═══════════════════════════════════════ -->
+        <section id="products-section" aria-label="Product catalog">
+            <div class="section-header">
+                <h2>📦 Product Catalog <span class="count-badge">6 products</span></h2>
+            </div>
+
+            <div class="data-table-wrapper">
+                <table class="data-table" id="products-table" aria-label="Products list with ratings and stock">
+                    <thead>
+                        <tr>
+                            <th>Product ID</th>
+                            <th>Product Name</th>
+                            <th>Category</th>
+                            <th>Price</th>
+                            <th>Rating</th>
+                            <th>Reviews</th>
+                            <th>Stock</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr data-product-id="P001">
+                            <td class="order-id">P001</td>
+                            <td><strong>Premium Wireless Headphones</strong><br><span style="font-size:0.75rem;color:#808090;">Active noise cancellation, 30hr battery, Hi-Res Audio</span></td>
+                            <td>Electronics</td>
+                            <td style="color: #27ae60; font-weight: 600;">$299.99</td>
+                            <td><span style="color:#f39c12;">★★★★★</span></td>
+                            <td>128 reviews</td>
+                            <td><span class="stock-medium">15 left</span></td>
+                        </tr>
+                        <tr data-product-id="P002">
+                            <td class="order-id">P002</td>
+                            <td><strong>USB-C Hub 7-in-1</strong><br><span style="font-size:0.75rem;color:#808090;">HDMI 4K, USB 3.0, SD reader, PD 100W</span></td>
+                            <td>Accessories</td>
+                            <td style="color: #27ae60; font-weight: 600;">$49.99</td>
+                            <td><span style="color:#f39c12;">★★★★☆</span></td>
+                            <td>87 reviews</td>
+                            <td><span class="stock-high">42 left</span></td>
+                        </tr>
+                        <tr data-product-id="P003">
+                            <td class="order-id">P003</td>
+                            <td><strong>4K Ultra Monitor 27"</strong><br><span style="font-size:0.75rem;color:#808090;">IPS panel, 99% sRGB, USB-C, adjustable stand</span></td>
+                            <td>Displays</td>
+                            <td style="color: #27ae60; font-weight: 600;">$599.99</td>
+                            <td><span style="color:#f39c12;">★★★★★</span></td>
+                            <td>203 reviews</td>
+                            <td><span class="stock-low">3 left</span></td>
+                        </tr>
+                        <tr data-product-id="P004">
+                            <td class="order-id">P004</td>
+                            <td><strong>Mechanical Keyboard RGB</strong><br><span style="font-size:0.75rem;color:#808090;">Cherry MX, per-key RGB, aluminum, hot-swap</span></td>
+                            <td>Peripherals</td>
+                            <td style="color: #27ae60; font-weight: 600;">$149.99</td>
+                            <td><span style="color:#f39c12;">★★★★★</span></td>
+                            <td>156 reviews</td>
+                            <td><span class="stock-high">28 left</span></td>
+                        </tr>
+                        <tr data-product-id="P005">
+                            <td class="order-id">P005</td>
+                            <td><strong>Ergonomic Mouse Pro</strong><br><span style="font-size:0.75rem;color:#808090;">25K DPI, wireless + BT, 70hr battery</span></td>
+                            <td>Peripherals</td>
+                            <td style="color: #27ae60; font-weight: 600;">$79.99</td>
+                            <td><span style="color:#f39c12;">★★★★☆</span></td>
+                            <td>94 reviews</td>
+                            <td><span class="stock-medium">12 left</span></td>
+                        </tr>
+                        <tr data-product-id="P006">
+                            <td class="order-id">P006</td>
+                            <td><strong>Smart Webcam 4K</strong><br><span style="font-size:0.75rem;color:#808090;">Auto-framing, noise-cancel mic, low-light</span></td>
+                            <td>Electronics</td>
+                            <td style="color: #27ae60; font-weight: 600;">$129.99</td>
+                            <td><span style="color:#f39c12;">★★★★☆</span></td>
+                            <td>62 reviews</td>
+                            <td><span class="stock-medium">8 left</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- ═══════════════════════════════════════ -->
+        <!-- REVIEWS + ORDER FORM -->
+        <!-- ═══════════════════════════════════════ -->
+        <div class="content-grid">
+
+            <!-- Reviews Panel (as table for better extraction) -->
+            <section class="panel" id="reviews-section" aria-label="Customer reviews">
+                <div class="panel-title">⭐ Customer Reviews</div>
+
+                <table class="review-table" aria-label="Customer reviews with ratings">
+                    <thead>
+                        <tr>
+                            <th>Reviewer</th>
+                            <th>Rating</th>
+                            <th>Product</th>
+                            <th>Review</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr data-review-id="R001" data-product-id="P001" data-reviewer="John Doe">
+                            <td>
+                                <span class="reviewer-name">John Doe</span><br>
+                                <span class="reviewer-meta">Verified Buyer • 2 days ago</span>
+                            </td>
+                            <td><span class="review-stars">★★★★★</span></td>
+                            <td>Premium Wireless Headphones</td>
+                            <td class="review-text">"Crystal clear audio, 30+ hour battery life, noise cancellation blocks out everything. Best audio purchase I've made."</td>
+                        </tr>
+                        <tr data-review-id="R002" data-product-id="P003" data-reviewer="Sarah Miller">
+                            <td>
+                                <span class="reviewer-name">Sarah Miller</span><br>
+                                <span class="reviewer-meta">Verified Buyer • 5 days ago</span>
+                            </td>
+                            <td><span class="review-stars">★★★★☆</span></td>
+                            <td>4K Ultra Monitor 27"</td>
+                            <td class="review-text">"Stunning for design work. Colors incredibly accurate. Minor complaint: built-in speakers are weak."</td>
+                        </tr>
+                        <tr data-review-id="R003" data-product-id="P004" data-reviewer="Alex Kim">
+                            <td>
+                                <span class="reviewer-name">Alex Kim</span><br>
+                                <span class="reviewer-meta">Verified Buyer • 1 week ago</span>
+                            </td>
+                            <td><span class="review-stars">★★★★★</span></td>
+                            <td>Mechanical Keyboard RGB</td>
+                            <td class="review-text">"Cherry MX switches are buttery smooth, RGB customization is endless. My coworkers are jealous!"</td>
+                        </tr>
+                        <tr data-review-id="R004" data-product-id="P002" data-reviewer="Rachel Park">
+                            <td>
+                                <span class="reviewer-name">Rachel Park</span><br>
+                                <span class="reviewer-meta">Verified Buyer • 2 weeks ago</span>
+                            </td>
+                            <td><span class="review-stars">★★★★★</span></td>
+                            <td>USB-C Hub + Ergonomic Mouse</td>
+                            <td class="review-text">"Both work flawlessly with my MacBook Pro. Hub handles 4K while charging. Mouse is super comfortable."</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- Order Form -->
+            <section class="panel" id="order-form-panel" aria-label="Place new order">
+                <div class="panel-title">📝 Place New Order</div>
+                <form id="order-form" aria-label="Order submission form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="customer-name">Full Name <span class="required">*</span></label>
+                            <input type="text" id="customer-name" name="customerName" placeholder="e.g. John Doe" required aria-required="true">
+                        </div>
+                        <div class="form-group">
+                            <label for="customer-email">Email Address <span class="required">*</span></label>
+                            <input type="email" id="customer-email" name="customerEmail" placeholder="e.g. john@example.com" required aria-required="true">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="customer-phone">Phone Number</label>
+                        <input type="tel" id="customer-phone" name="customerPhone" placeholder="e.g. +1 (555) 123-4567">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="product-select">Product <span class="required">*</span></label>
+                            <select id="product-select" name="product" required aria-required="true">
+                                <option value="">Select a product...</option>
+                                <option value="P001">Premium Wireless Headphones — $299.99</option>
+                                <option value="P002">USB-C Hub 7-in-1 — $49.99</option>
+                                <option value="P003">4K Ultra Monitor 27" — $599.99</option>
+                                <option value="P004">Mechanical Keyboard RGB — $149.99</option>
+                                <option value="P005">Ergonomic Mouse Pro — $79.99</option>
+                                <option value="P006">Smart Webcam 4K — $129.99</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="quantity">Quantity <span class="required">*</span></label>
+                            <input type="number" id="quantity" name="quantity" placeholder="1" min="1" max="99" required aria-required="true">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="shipping-address">Shipping Address <span class="required">*</span></label>
+                        <input type="text" id="shipping-address" name="shippingAddress" placeholder="123 Main St, City, State ZIP" required aria-required="true">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="shipping-method">Shipping Method</label>
+                            <select id="shipping-method" name="shippingMethod">
+                                <option value="">Select shipping...</option>
+                                <option value="standard">Standard (5–7 days) — Free</option>
+                                <option value="express">Express (2–3 days) — $9.99</option>
+                                <option value="overnight">Overnight (Next day) — $24.99</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="payment-method">Payment Method</label>
+                            <select id="payment-method" name="paymentMethod">
+                                <option value="">Select payment...</option>
+                                <option value="credit">Credit Card</option>
+                                <option value="paypal">PayPal</option>
+                                <option value="apple">Apple Pay</option>
+                                <option value="crypto">Crypto</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="order-notes">Special Instructions</label>
+                        <textarea id="order-notes" name="notes" rows="3" placeholder="Any delivery notes, gift wrapping requests, etc."></textarea>
+                    </div>
+                    <div style="display: flex; gap: 12px; margin-top: 8px;">
+                        <button type="submit" class="btn btn-submit" id="submit-order-btn">🚀 Submit Order</button>
+                        <button type="reset" class="btn btn-secondary" id="clear-form-btn">🗑️ Clear</button>
+                    </div>
+                </form>
+            </section>
+        </div>
+
+        <!-- ═══════════════════════════════════════ -->
+        <!-- ORDER HISTORY TABLE -->
+        <!-- ═══════════════════════════════════════ -->
+        <section id="orders-section" aria-label="Recent orders">
+            <div class="data-table-wrapper">
+                <div class="section-header">
+                    <h2>📋 Recent Orders <span class="count-badge">6 orders</span></h2>
+                </div>
+                <table class="data-table" id="orders-table" aria-label="Order history">
+                    <thead>
+                        <tr>
+                            <th>Order ID</th>
+                            <th>Customer</th>
+                            <th>Product</th>
+                            <th>Qty</th>
+                            <th>Total</th>
+                            <th>Status</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr data-order-id="ORD-2024-00841">
+                            <td class="order-id">ORD-2024-00841</td>
+                            <td>Emily Johnson</td>
+                            <td>Premium Wireless Headphones</td>
+                            <td>1</td>
+                            <td style="color: #27ae60; font-weight: 600;">$299.99</td>
+                            <td><span class="status-badge status-delivered">Delivered</span></td>
+                            <td style="color: #808090;">Dec 18, 2024</td>
+                        </tr>
+                        <tr data-order-id="ORD-2024-00842">
+                            <td class="order-id">ORD-2024-00842</td>
+                            <td>Michael Chen</td>
+                            <td>4K Ultra Monitor 27"</td>
+                            <td>1</td>
+                            <td style="color: #27ae60; font-weight: 600;">$599.99</td>
+                            <td><span class="status-badge status-shipped">Shipped</span></td>
+                            <td style="color: #808090;">Dec 20, 2024</td>
+                        </tr>
+                        <tr data-order-id="ORD-2024-00843">
+                            <td class="order-id">ORD-2024-00843</td>
+                            <td>Sarah Miller</td>
+                            <td>Mechanical Keyboard RGB</td>
+                            <td>2</td>
+                            <td style="color: #27ae60; font-weight: 600;">$299.98</td>
+                            <td><span class="status-badge status-shipped">Shipped</span></td>
+                            <td style="color: #808090;">Dec 21, 2024</td>
+                        </tr>
+                        <tr data-order-id="ORD-2024-00844">
+                            <td class="order-id">ORD-2024-00844</td>
+                            <td>David Park</td>
+                            <td>USB-C Hub 7-in-1</td>
+                            <td>3</td>
+                            <td style="color: #27ae60; font-weight: 600;">$149.97</td>
+                            <td><span class="status-badge status-processing">Processing</span></td>
+                            <td style="color: #808090;">Dec 22, 2024</td>
+                        </tr>
+                        <tr data-order-id="ORD-2024-00845">
+                            <td class="order-id">ORD-2024-00845</td>
+                            <td>Lisa Wong</td>
+                            <td>Ergonomic Mouse Pro</td>
+                            <td>1</td>
+                            <td style="color: #27ae60; font-weight: 600;">$79.99</td>
+                            <td><span class="status-badge status-processing">Processing</span></td>
+                            <td style="color: #808090;">Dec 23, 2024</td>
+                        </tr>
+                        <tr data-order-id="ORD-2024-00846">
+                            <td class="order-id">ORD-2024-00846</td>
+                            <td>James Rivera</td>
+                            <td>Smart Webcam 4K</td>
+                            <td>1</td>
+                            <td style="color: #27ae60; font-weight: 600;">$129.99</td>
+                            <td><span class="status-badge status-pending">Pending</span></td>
+                            <td style="color: #808090;">Dec 24, 2024</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- ═══════════════════════════════════════ -->
+        <!-- SUPPORT TICKETS -->
+        <!-- ═══════════════════════════════════════ -->
+        <section class="support-section" id="support-section" aria-label="Support tickets">
+            <div class="section-header" style="margin-top:0;">
+                <h2>🎫 Open Support Tickets <span class="count-badge">3 tickets</span></h2>
+            </div>
+
+            <table class="data-table" aria-label="Support tickets">
+                <thead>
+                    <tr>
+                        <th>Ticket ID</th>
+                        <th>Priority</th>
+                        <th>Subject</th>
+                        <th>Customer</th>
+                        <th>Details</th>
+                        <th>Created</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr data-ticket-id="TK-1001">
+                        <td class="order-id">TK-1001</td>
+                        <td><span class="status-badge" style="background:rgba(231,76,60,0.15);color:#e74c3c;">Urgent</span></td>
+                        <td><strong>Monitor arrived with dead pixels</strong></td>
+                        <td>Michael Chen</td>
+                        <td style="font-size:0.8rem;color:#808090;">2 dead pixels top-left corner. Order #ORD-2024-00842. Requesting replacement.</td>
+                        <td style="color:#808090;">Dec 22, 2024</td>
+                    </tr>
+                    <tr data-ticket-id="TK-1002">
+                        <td class="order-id">TK-1002</td>
+                        <td><span class="status-badge" style="background:rgba(52,152,219,0.15);color:#3498db;">Normal</span></td>
+                        <td><strong>Keyboard firmware update failing</strong></td>
+                        <td>Sarah Miller</td>
+                        <td style="font-size:0.8rem;color:#808090;">Error code FW-403 via desktop app. macOS Sonoma 14.2.</td>
+                        <td style="color:#808090;">Dec 23, 2024</td>
+                    </tr>
+                    <tr data-ticket-id="TK-1003">
+                        <td class="order-id">TK-1003</td>
+                        <td><span class="status-badge" style="background:rgba(39,174,96,0.15);color:#27ae60;">Low</span></td>
+                        <td><strong>Bulk order pricing request</strong></td>
+                        <td>TechStart Inc.</td>
+                        <td style="font-size:0.8rem;color:#808090;">50x USB-C Hubs + 50x Ergonomic Mouse. Volume discount inquiry.</td>
+                        <td style="color:#808090;">Dec 24, 2024</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+    </div>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+        <p>© 2024 TechVault Inc. • Built for <a href="#">AI Copilot Demo</a> • All data is simulated</p>
+    </footer>
+
+    <!-- TOAST -->
+    <div class="toast-notification" id="toast" role="alert" aria-live="polite">✅ Action completed!</div>
+
+    <script>
+        // Form submit handler
+        document.getElementById('order-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const toast = document.getElementById('toast');
+            toast.textContent = '✅ Order submitted successfully!';
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        });
+    </script>
+</body>
+</html>

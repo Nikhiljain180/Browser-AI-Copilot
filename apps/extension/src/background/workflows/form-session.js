@@ -14,6 +14,10 @@ const DEFAULT_FORM_SESSION = {
   editField: null,
   submitButtons: [],
   targetButton: null,
+  pageUrl: null,
+  awaitingExtractionValueConfirmation: false,
+  allowExtractionAutofill: false,
+  autoSubmitRequested: false,
 };
 
 CopilotSw.ensureFormSessionState = function ensureFormSessionState() {
@@ -30,6 +34,12 @@ CopilotSw.ensureFormSessionState = function ensureFormSessionState() {
     if (!s.editField) s.editField = null;
     if (!Array.isArray(s.submitButtons)) s.submitButtons = [];
     if (!s.targetButton) s.targetButton = null;
+    if (typeof s.pageUrl !== 'string') s.pageUrl = null;
+    if (typeof s.awaitingExtractionValueConfirmation !== 'boolean') {
+      s.awaitingExtractionValueConfirmation = false;
+    }
+    if (typeof s.allowExtractionAutofill !== 'boolean') s.allowExtractionAutofill = false;
+    if (typeof s.autoSubmitRequested !== 'boolean') s.autoSubmitRequested = false;
   }
   return CopilotSw.agentState.formSession;
 };
@@ -43,8 +53,20 @@ CopilotSw.setFormSession = function setFormSession(fields = [], active = true, m
   session.awaitingSubmitConfirmation = !!meta.awaitingSubmitConfirmation;
   session.editMode = !!meta.editMode;
   session.editField = meta.editField ? CopilotSw.normalizeFieldRef(meta.editField) : null;
-  session.submitButtons = Array.isArray(meta.submitButtons) ? meta.submitButtons : (session.submitButtons || []);
+  session.submitButtons = Array.isArray(meta.submitButtons)
+    ? meta.submitButtons
+    : session.submitButtons || [];
   session.targetButton = meta.targetButton || session.targetButton || null;
+  if (typeof meta.pageUrl === 'string') session.pageUrl = meta.pageUrl;
+  if (typeof meta.awaitingExtractionValueConfirmation === 'boolean') {
+    session.awaitingExtractionValueConfirmation = meta.awaitingExtractionValueConfirmation;
+  }
+  if (typeof meta.allowExtractionAutofill === 'boolean') {
+    session.allowExtractionAutofill = meta.allowExtractionAutofill;
+  }
+  if (typeof meta.autoSubmitRequested === 'boolean') {
+    session.autoSubmitRequested = meta.autoSubmitRequested;
+  }
   return session;
 };
 
@@ -71,7 +93,7 @@ CopilotSw.fieldKey = function fieldKey(field = {}) {
 
 CopilotSw.buildFieldLookup = function buildFieldLookup(fields = []) {
   const map = new Map();
-  fields.forEach(field => {
+  fields.forEach((field) => {
     if (field?.agentId) map.set(field.agentId, field);
     if (field?.selector) map.set(field.selector, field);
   });
@@ -80,16 +102,9 @@ CopilotSw.buildFieldLookup = function buildFieldLookup(fields = []) {
 
 CopilotSw.buildButtonLookup = function buildButtonLookup(buttons = []) {
   const map = new Map();
-  buttons.forEach(button => {
+  buttons.forEach((button) => {
     if (button?.agentId) map.set(button.agentId, button);
     if (button?.selector) map.set(button.selector, button);
   });
   return map;
-};
-
-CopilotSw.splitUserValues = function splitUserValues(goal) {
-  return String(goal || '')
-    .split(/[\n,]+/)
-    .map(v => v.trim())
-    .filter(Boolean);
 };

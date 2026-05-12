@@ -17,13 +17,15 @@ function notifyPageContextChanged(reason) {
   // Clear stale element references from previous page
   pageElementRegistry.clear();
 
-  chrome.runtime.sendMessage({
-    action: 'pageContextChanged',
-    url: window.location.href,
-    title: document.title,
-    reason: reason || 'unknown',
-    timestamp: Date.now(),
-  }).catch(() => {});
+  chrome.runtime
+    .sendMessage({
+      action: 'pageContextChanged',
+      url: window.location.href,
+      title: document.title,
+      reason: reason || 'unknown',
+      timestamp: Date.now(),
+    })
+    .catch(() => {});
 }
 
 function schedulePageContextChanged(reason) {
@@ -65,7 +67,7 @@ function observeDOMChanges() {
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ['class', 'style', 'disabled', 'value']
+    attributeFilter: ['class', 'style', 'disabled', 'value'],
   });
 
   mutationObserver = observer;

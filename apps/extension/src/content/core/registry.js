@@ -14,7 +14,11 @@ function resolveElement({ agentId, agent_id, selector }) {
   }
 
   if (selector) {
-    return document.querySelector(selector);
+    try {
+      return document.querySelector(selector);
+    } catch {
+      return null;
+    }
   }
 
   return null;

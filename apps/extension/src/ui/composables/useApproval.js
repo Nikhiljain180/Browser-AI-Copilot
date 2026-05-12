@@ -47,7 +47,7 @@ export function useApproval() {
 
   function setApprovalRequest(data) {
     approvalRequest.value = {
-      id: data.approvalId,
+      actionId: data.approvalId,
       toolName: data.toolName,
       toolInput: data.toolInput,
       riskLevel: data.riskLevel || 'medium',
@@ -59,7 +59,7 @@ export function useApproval() {
     if (!approvalRequest.value) return;
     await sendRuntimeMessage({
       action: 'approveAction',
-      actionId: approvalRequest.value.id,
+      actionId: approvalRequest.value.actionId,
     });
     approvalRequest.value = null;
   }
@@ -68,7 +68,7 @@ export function useApproval() {
     if (!approvalRequest.value) return;
     await sendRuntimeMessage({
       action: 'rejectAction',
-      actionId: approvalRequest.value.id,
+      actionId: approvalRequest.value.actionId,
     });
     approvalRequest.value = null;
   }

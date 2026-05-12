@@ -28,11 +28,13 @@
 
     <!-- Messages -->
     <template v-else>
-      <ChatMessage
+      <template
         v-for="(message, index) in visibleMessages"
         :key="`${message.timestamp || index}-${message.role}-${index}`"
-        :message="message"
-      />
+      >
+        <ActivityCard v-if="message.role === 'tool'" :message="message" />
+        <ChatMessage v-else :message="message" />
+      </template>
     </template>
 
     <!-- Pending message -->
@@ -51,6 +53,7 @@
 import { ref, onMounted } from 'vue';
 import ChatMessage from './ChatMessage.vue';
 import PendingMessage from './PendingMessage.vue';
+import ActivityCard from './ActivityCard.vue';
 
 defineProps({
   isHydrated: { type: Boolean, default: false },

@@ -39,7 +39,7 @@ async function start(): Promise<void> {
     app.listen(config.port, () => {
       console.log(
         `Browser AI Copilot backend listening on http://${config.host}:${config.port} ` +
-        `(provider=${config.llm.provider}, model=${config.llm.model})`
+          `(provider=${config.llm.provider}, model=${config.llm.model})`,
       );
     });
   } catch (error: any) {

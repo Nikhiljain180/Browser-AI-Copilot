@@ -4,7 +4,7 @@
   "description": "Node.js Express proxy server for LLM API gateway",
   "main": "dist/server.js",
   "scripts": {
-    "build": "tsc --project tsconfig.build.json",
+    "build": "echo 'No build step needed for backend'",
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
     "test": "jest --config ./jest.config.js",

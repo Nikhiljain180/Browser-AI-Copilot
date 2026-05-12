@@ -1,11 +1,7 @@
 <template>
   <header class="shell-header">
-    <div>
-      <p class="eyebrow">Browser AI Copilot</p>
-      <h1>Agent workspace</h1>
-      <p class="header-subtitle">
-        Browse, ask, and automate from a full-height side panel.
-      </p>
+    <div class="shell-header-left">
+      <span class="shell-header-brand">AI Copilot</span>
     </div>
 
     <div class="header-actions">
@@ -15,11 +11,20 @@
       </div>
 
       <button
+        class="icon-button"
+        type="button"
+        title="Toggle theme"
+        @click="emit('toggle-theme')"
+      >
+        {{ theme === 'dark' ? 'Light' : 'Dark' }}
+      </button>
+
+      <button
         v-if="!isRunning && hasMessages"
         class="icon-button"
         type="button"
         title="Start a new chat"
-        @click="$emit('new-chat')"
+        @click="emit('new-chat')"
       >
         New chat
       </button>
@@ -29,7 +34,7 @@
         class="icon-button danger"
         type="button"
         title="Stop agent"
-        @click="$emit('stop-agent')"
+        @click="emit('stop-agent')"
       >
         Stop
       </button>
@@ -38,12 +43,13 @@
 </template>
 
 <script setup>
+const emit = defineEmits(['new-chat', 'stop-agent', 'toggle-theme']);
+
 defineProps({
   isRunning: { type: Boolean, default: false },
   offline: { type: Boolean, default: false },
   hasMessages: { type: Boolean, default: false },
   statusLabel: { type: String, default: 'Ready' },
+  theme: { type: String, default: 'dark' },
 });
-
-defineEmits(['new-chat', 'stop-agent']);
 </script>

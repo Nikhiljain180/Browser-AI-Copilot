@@ -10,13 +10,13 @@ import path from 'path';
 export default defineConfig({
   root: path.resolve(__dirname),
   plugins: [vue()],
-  
+
   test: {
     environment: 'jsdom',
     globals: true,
-    include: ['tests/unit/**/*.test.js'],
+    include: ['tests/unit/**/*.test.js', 'apps/extension/tests/unit/**/*.test.js'],
     exclude: ['node_modules', 'dist'],
-    
+
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
@@ -25,10 +25,7 @@ export default defineConfig({
         'apps/extension/src/**/*.vue',
         'apps/backend/**/*.js',
       ],
-      exclude: [
-        'node_modules',
-        'tests',
-      ],
+      exclude: ['node_modules', 'tests'],
     },
   },
 

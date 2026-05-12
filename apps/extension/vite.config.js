@@ -9,11 +9,17 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [vue()],
-  
+
+  test: {
+    environment: 'jsdom',
+  },
+
+  publicDir: false,
+
   build: {
     outDir: './public/dist',
     emptyOutDir: false, // Preserve manifest.json, icons
-    
+
     rollupOptions: {
       input: {
         popup: path.resolve(__dirname, 'src/ui/popup.js'),
