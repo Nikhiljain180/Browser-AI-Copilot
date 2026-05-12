@@ -17,6 +17,7 @@ const DEFAULT_FORM_SESSION = {
   pageUrl: null,
   awaitingExtractionValueConfirmation: false,
   allowExtractionAutofill: false,
+  autoSubmitRequested: false,
 };
 
 CopilotSw.ensureFormSessionState = function ensureFormSessionState() {
@@ -38,6 +39,7 @@ CopilotSw.ensureFormSessionState = function ensureFormSessionState() {
       s.awaitingExtractionValueConfirmation = false;
     }
     if (typeof s.allowExtractionAutofill !== 'boolean') s.allowExtractionAutofill = false;
+    if (typeof s.autoSubmitRequested !== 'boolean') s.autoSubmitRequested = false;
   }
   return CopilotSw.agentState.formSession;
 };
@@ -61,6 +63,9 @@ CopilotSw.setFormSession = function setFormSession(fields = [], active = true, m
   }
   if (typeof meta.allowExtractionAutofill === 'boolean') {
     session.allowExtractionAutofill = meta.allowExtractionAutofill;
+  }
+  if (typeof meta.autoSubmitRequested === 'boolean') {
+    session.autoSubmitRequested = meta.autoSubmitRequested;
   }
   return session;
 };

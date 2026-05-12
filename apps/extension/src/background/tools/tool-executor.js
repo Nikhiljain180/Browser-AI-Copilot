@@ -93,6 +93,16 @@ CopilotSw.executeToolWithApproval = async function executeToolWithApproval(
 };
 
 CopilotSw.executeTool = async function executeTool(toolName, toolInput, tabId) {
+  let payload = toolInput;
+  if (
+    toolName === 'click_element' &&
+    toolInput &&
+    typeof toolInput === 'object' &&
+    typeof CopilotSw.sanitizeClickElementInput === 'function'
+  ) {
+    payload = CopilotSw.sanitizeClickElementInput({ ...toolInput });
+  }
+
   let lastError = null;
 
   for (let attempt = 1; attempt <= MAX_TOOL_ATTEMPTS; attempt += 1) {
@@ -104,7 +114,7 @@ CopilotSw.executeTool = async function executeTool(toolName, toolInput, tabId) {
       const result = await CopilotSw.sendMessageToTab(tabId, {
         action: 'executeTool',
         toolName,
-        toolInput,
+        toolInput: payload,
       });
 
       if (result && !result.error) {

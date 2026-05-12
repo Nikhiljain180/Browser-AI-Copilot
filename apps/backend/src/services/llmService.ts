@@ -1,6 +1,11 @@
 import config from '../config';
 import { getClient } from '../providers/llmClient';
-import { SYSTEM_PROMPT, FORM_FILL_SYSTEM_PROMPT } from '../prompts';
+import {
+  SYSTEM_PROMPT,
+  FORM_FILL_SYSTEM_PROMPT,
+  INTENT_PLAN_SYSTEM_PROMPT,
+  PENDING_FIELD_REPLY_MAP_PROMPT,
+} from '../prompts';
 import {
   delay,
   normalizeMessageContent,
@@ -61,6 +66,48 @@ export function buildFormFillMessages(
     {
       role: 'user',
       content: `User request: ${goal}\n\nRecent conversation:\n${recentHistory || 'None'}\n\nForm inventory:\n${formInventory}`,
+    },
+  ];
+}
+
+export function buildPendingFieldMapMessages(
+  message: string,
+  pendingFields: Array<{ agent_id: string; label?: string; selector?: string; type?: string }>,
+): ConversationMessage[] {
+  const inventory = JSON.stringify(pendingFields, null, 2);
+  return [
+    { role: 'system', content: PENDING_FIELD_REPLY_MAP_PROMPT },
+    {
+      role: 'user',
+      content: `User message:\n${message}\n\nPending fields (agent_id must match keys in values):\n${inventory}`,
+    },
+  ];
+}
+
+export function buildIntentPlanMessages(
+  goal: string,
+  pageContext: PageContext | null | undefined,
+  forms: unknown[] = [],
+  chatHistory: ChatMessage[] = [],
+): ConversationMessage[] {
+  const recentHistory = chatHistory
+    .filter((message) => message.role !== 'tool')
+    .slice(-6)
+    .map((message) => `${message.role}: ${normalizeMessageContent(message.content)}`)
+    .join('\n');
+
+  const contextSummary = summarizePageContext(pageContext);
+  const formInventory = JSON.stringify(forms, null, 2);
+
+  return [
+    { role: 'system', content: INTENT_PLAN_SYSTEM_PROMPT },
+    {
+      role: 'user',
+      content:
+        `User request: ${goal}\n\n` +
+        `Recent conversation:\n${recentHistory || 'None'}\n\n` +
+        `Current page summary:\n${contextSummary || 'None'}\n\n` +
+        `Form inventory:\n${formInventory}`,
     },
   ];
 }

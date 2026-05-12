@@ -63,7 +63,7 @@ import { useChat } from './composables/useChat.js';
 import { useApproval } from './composables/useApproval.js';
 import { useHealth } from './composables/useHealth.js';
 import { useTheme } from './composables/useTheme.js';
-import { sendRuntimeMessage } from './composables/useRuntime.js';
+import { sendRuntimeMessage, getActiveBrowserTabId } from './composables/useRuntime.js';
 
 const agent = useAgent();
 const chat = useChat();
@@ -75,7 +75,43 @@ const draft = ref('');
 const errorMessage = ref(null);
 const lastPrompt = ref('');
 const chatFeedRef = ref(null);
+/** Background messages are scoped to this tab so multiple tabs do not cross-talk in the popup / side panel. */
+const activeTabId = ref(null);
 let errorTimeoutId = null;
+/** Side panel stays mounted when switching tabs — refresh chat when the active page tab changes. */
+let tabActivateListener = null;
+let refreshChatDebounceTimer = null;
+
+async function refreshChatForActiveTab() {
+  try {
+    const tid = await getActiveBrowserTabId();
+    activeTabId.value = tid;
+    const response = await chat.syncHistory(tid);
+    if (response) {
+      agent.isRunning.value = Boolean(response.isRunning);
+      if (response.isRunning) {
+        agent.phase.value = 'thinking';
+        agent.phaseDetail.value = response.currentGoal
+          ? `Continuing: ${response.currentGoal}`
+          : 'Resuming the current agent run.';
+      } else {
+        agent.phase.value = 'idle';
+        agent.phaseDetail.value = 'Ready for your next request.';
+      }
+    }
+    await chat.scrollChatToBottom();
+  } catch (_) {
+    /* restricted pages or no tab */
+  }
+}
+
+function scheduleRefreshChatForActiveTab() {
+  clearTimeout(refreshChatDebounceTimer);
+  refreshChatDebounceTimer = setTimeout(() => {
+    refreshChatForActiveTab();
+    refreshChatDebounceTimer = null;
+  }, 80);
+}
 
 const canSend = computed(() => draft.value.trim().length > 0 && !agent.isRunning.value);
 const canRetryLastPrompt = computed(() => Boolean(lastPrompt.value) && !agent.isRunning.value);
@@ -125,7 +161,9 @@ async function submitPrompt() {
   await chat.scrollChatToBottom();
 
   try {
-    const response = await sendRuntimeMessage({ action: 'startAgent', goal });
+    const tabId = await getActiveBrowserTabId();
+    activeTabId.value = tabId;
+    const response = await sendRuntimeMessage({ action: 'startAgent', goal, tabId });
 
     if (response?.error) throw new Error(response.error);
 
@@ -158,7 +196,9 @@ async function retryLastPrompt() {
 
 async function stopAgent() {
   try {
-    await sendRuntimeMessage({ action: 'stopAgent' });
+    const tabId = await getActiveBrowserTabId();
+    activeTabId.value = tabId;
+    await sendRuntimeMessage({ action: 'stopAgent', tabId });
   } catch (error) {
     console.error('Failed to stop agent', error);
   } finally {
@@ -171,7 +211,9 @@ async function stopAgent() {
 
 async function startNewChat() {
   try {
-    const response = await sendRuntimeMessage({ action: 'clearChat' });
+    const tabId = await getActiveBrowserTabId();
+    activeTabId.value = tabId;
+    const response = await sendRuntimeMessage({ action: 'clearChat', tabId });
     if (response?.error) throw new Error(response.error);
 
     chat.messages.value = [];
@@ -188,6 +230,14 @@ async function startNewChat() {
 
 function handleRuntimeMessage(message) {
   if (message.action === 'pageContextChanged') {
+    return;
+  }
+
+  if (
+    message.tabId != null &&
+    activeTabId.value != null &&
+    message.tabId !== activeTabId.value
+  ) {
     return;
   }
 
@@ -234,16 +284,10 @@ watch(
 onMounted(async () => {
   chrome.runtime.onMessage.addListener(handleRuntimeMessage);
 
-  const response = await chat.syncHistory();
-  if (response) {
-    agent.isRunning.value = Boolean(response.isRunning);
-    if (response.isRunning) {
-      agent.phase.value = 'thinking';
-      agent.phaseDetail.value = response.currentGoal
-        ? `Continuing: ${response.currentGoal}`
-        : 'Resuming the current agent run.';
-    }
-  }
+  tabActivateListener = () => scheduleRefreshChatForActiveTab();
+  chrome.tabs.onActivated.addListener(tabActivateListener);
+
+  await refreshChatForActiveTab();
 
   // Bind scroll observers to the ChatFeed's internal scroller
   const feedEl = chatFeedRef.value?.chatScrollerRef;
@@ -257,6 +301,12 @@ onMounted(async () => {
   theme.loadTheme();});
 
 onUnmounted(() => {
+  clearTimeout(refreshChatDebounceTimer);
+  refreshChatDebounceTimer = null;
+  if (tabActivateListener) {
+    chrome.tabs.onActivated.removeListener(tabActivateListener);
+    tabActivateListener = null;
+  }
   chrome.runtime.onMessage.removeListener(handleRuntimeMessage);
   chat.destroyScrollObservers();
   health.stopHealthCheckPolling();

@@ -34,9 +34,30 @@ const ACTION_SIGNALS = [
   'purchase',
 ];
 
+const STRUCTURED_ANALYSIS_SIGNALS = [
+  'find the ',
+  'find a ',
+  'which ',
+  'who ',
+  'what is the total',
+  'total value',
+  'sum of',
+  'how many',
+  'most popular',
+  'most reviews',
+  'highest rating',
+  'low in stock',
+  'low stock',
+  'delivered orders',
+  'create an order',
+  'place an order',
+];
+
 function inferQueryType(goal) {
   const text = String(goal || '').toLowerCase();
-  return ACTION_SIGNALS.some((signal) => text.includes(signal)) ? 'action' : 'informational';
+  if (ACTION_SIGNALS.some((signal) => text.includes(signal))) return 'action';
+  if (STRUCTURED_ANALYSIS_SIGNALS.some((signal) => text.includes(signal))) return 'action';
+  return 'informational';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

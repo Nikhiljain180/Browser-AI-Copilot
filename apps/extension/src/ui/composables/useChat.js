@@ -1,5 +1,5 @@
 import { ref, computed, nextTick } from 'vue';
-import { sendRuntimeMessage } from './useRuntime.js';
+import { sendRuntimeMessage, getActiveBrowserTabId } from './useRuntime.js';
 
 export function useChat() {
   const messages = ref([]);
@@ -83,21 +83,19 @@ export function useChat() {
     chatResizeObserver = null;
   }
 
-  async function syncHistory() {
+  /**
+   * @param {number | undefined} [explicitTabId] — Pass when you already resolved the active page tab
+   *   (avoids a race with tab switches while the side panel stays open).
+   */
+  async function syncHistory(explicitTabId) {
     try {
-      let hasStoredHistory = false;
-      const storageData = await chrome.storage.local.get('agentState');
-      if (storageData?.agentState) {
-        messages.value = storageData.agentState.chatHistory || [];
-        hasStoredHistory = messages.value.length > 0;
-        isHydrated.value = true;
-      }
-
-      const response = await sendRuntimeMessage({ action: 'getChatHistory' });
+      const tabId =
+        explicitTabId !== undefined && explicitTabId !== null
+          ? explicitTabId
+          : await getActiveBrowserTabId();
+      const response = await sendRuntimeMessage({ action: 'getChatHistory', tabId });
       const runtimeHistory = response?.history || [];
-      if (runtimeHistory.length > 0 || !hasStoredHistory) {
-        messages.value = runtimeHistory;
-      }
+      messages.value = runtimeHistory;
 
       return response;
     } catch (error) {

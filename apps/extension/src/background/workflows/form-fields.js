@@ -96,13 +96,24 @@ CopilotSw.validateFormWorkflowPlan = function validateFormWorkflowPlan(plan, for
     });
   }
 
+  const rawMissing = Array.isArray(plan?.missing_fields)
+    ? plan.missing_fields.map(CopilotSw.normalizeFieldRef)
+    : Array.isArray(plan?.missing_required)
+      ? plan.missing_required.map(CopilotSw.normalizeFieldRef)
+      : [];
+
+  const dedupedMissing = [];
+  const seenMissing = new Set();
+  for (const ref of rawMissing) {
+    const key = CopilotSw.fieldKey(ref);
+    if (!key || seenMissing.has(key)) continue;
+    seenMissing.add(key);
+    dedupedMissing.push(ref);
+  }
+
   const safePlan = {
     fields: validFields,
-    missingFields: Array.isArray(plan?.missing_fields)
-      ? plan.missing_fields.map(CopilotSw.normalizeFieldRef)
-      : Array.isArray(plan?.missing_required)
-        ? plan.missing_required.map(CopilotSw.normalizeFieldRef)
-        : [],
+    missingFields: dedupedMissing,
     nextAction: String(plan?.next_action || '').trim(),
     summary: String(plan?.summary || '').trim(),
     targetButton: null,
@@ -111,7 +122,8 @@ CopilotSw.validateFormWorkflowPlan = function validateFormWorkflowPlan(plan, for
 
   const buttonLookup = CopilotSw.buildButtonLookup(allButtons);
   if (plan?.target_button_agent_id) {
-    safePlan.targetButton = buttonLookup.get(plan.target_button_agent_id) || null;
+    const resolved = buttonLookup.get(plan.target_button_agent_id) || null;
+    safePlan.targetButton = CopilotSw.normalizeButtonRef(resolved);
   }
 
   return safePlan;

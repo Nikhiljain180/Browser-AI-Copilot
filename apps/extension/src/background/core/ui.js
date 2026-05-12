@@ -4,8 +4,16 @@
 // UI COMMUNICATION
 // ─────────────────────────────────────────────────────────────────────────────
 
+function withTabScope(message) {
+  const tabId = CopilotSw.getActiveTabId?.();
+  if (tabId == null || tabId === undefined) {
+    return message;
+  }
+  return { ...message, tabId };
+}
+
 CopilotSw.broadcastUI = function broadcastUI(message) {
-  chrome.runtime.sendMessage(message).catch(() => {
+  chrome.runtime.sendMessage(withTabScope(message)).catch(() => {
     // Silently ignore — UI may not be open
   });
 };

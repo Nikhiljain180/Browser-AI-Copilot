@@ -53,12 +53,28 @@ export function summarizePageContext(pageContext: PageContext | null | undefined
     .join('\n\n');
   const sectionsPreview = clamp(sectionsPreviewRaw, sectionsBudget);
 
-  const formsPreviewRaw = (pageContext.forms || [])
+  type ContextField = {
+    label?: string;
+    name?: string;
+    placeholder?: string;
+    agentId?: string;
+    type?: string;
+    required?: boolean;
+    isFilled?: boolean;
+  };
+  type ContextForm = {
+    title?: string;
+    fields?: ContextField[];
+  };
+
+  const forms = Array.isArray(pageContext.forms) ? (pageContext.forms as ContextForm[]) : [];
+
+  const formsPreviewRaw = forms
     .slice(0, 5)
-    .map((form, formIndex) => {
+    .map((form: ContextForm, formIndex: number) => {
       const formTitle = String(form?.title || '').trim() || `Form ${formIndex + 1}`;
       const fields = Array.isArray(form?.fields) ? form.fields : [];
-      const fieldLines = fields.slice(0, 12).map((field, fieldIndex) => {
+      const fieldLines = fields.slice(0, 12).map((field: ContextField, fieldIndex: number) => {
         const label =
           String(
             field?.label || field?.name || field?.placeholder || `Field ${fieldIndex + 1}`,

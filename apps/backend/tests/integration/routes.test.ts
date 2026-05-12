@@ -31,6 +31,24 @@ describe('Form Routes', () => {
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('goal is required');
   });
+
+  it('POST /api/forms/intent-plan should return 400 without goal', async () => {
+    const res = await request(app)
+      .post('/api/forms/intent-plan')
+      .send({ pageContext: null, forms: [], chatHistory: [] });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('goal is required');
+  });
+
+  it('POST /api/forms/pending-reply-map should return 400 without message', async () => {
+    const res = await request(app)
+      .post('/api/forms/pending-reply-map')
+      .send({ pendingFields: [{ agent_id: 'f1', label: 'Email' }] });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('message is required');
+  });
 });
 
 describe('Config Routes', () => {

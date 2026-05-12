@@ -60,6 +60,16 @@ export interface FormPlanRequestBody {
   chatHistory?: ChatMessage[];
 }
 
+export interface IntentPlan {
+  needs_extraction: boolean;
+  needs_form_fill: boolean;
+  needs_submit: boolean;
+  needs_clear: boolean;
+  needs_clarification: boolean;
+  clarification_question: string;
+  reason: string;
+}
+
 export interface ConfigUpdateRequestBody {
   provider?: string;
   model?: string;

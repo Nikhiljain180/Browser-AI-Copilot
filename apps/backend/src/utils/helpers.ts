@@ -53,6 +53,33 @@ export function inferQueryType(goal: string): 'action' | 'informational' {
     return 'action';
   }
 
+  const structuredAnalysisSignals = [
+    'find the ',
+    'find a ',
+    'which ',
+    'who ',
+    'what is the total',
+    'total value',
+    'sum of',
+    'how many',
+    'most popular',
+    'most reviews',
+    'highest rating',
+    'low in stock',
+    'low stock',
+    'delivered orders',
+    'create an order',
+    'place an order',
+  ];
+
+  if (structuredAnalysisSignals.some((signal) => text.includes(signal))) {
+    return 'action';
+  }
+
+  if (/\b(fetch|list|browse)\s/.test(text) || /\ball\s+products?\b/.test(text)) {
+    return 'action';
+  }
+
   return 'informational';
 }
 

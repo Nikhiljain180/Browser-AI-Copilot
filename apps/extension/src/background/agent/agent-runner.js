@@ -289,22 +289,102 @@ function shouldBlockStructuredFill(goal, pageContext, llmResponse) {
   };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// FORM WORKFLOW HANDLER
-// ─────────────────────────────────────────────────────────────────────────────
-
-async function handleFormWorkflow(goal, pageContext, tabId) {
+function resolveFallbackIntentPlan(goal, session) {
   const normalizedGoal = String(goal || '').toLowerCase();
   const isExtractionIntent = CopilotSw.isStructuredExtractionGoal(normalizedGoal);
-  const session = CopilotSw.agentState.formSession || {};
-
   const isFormIntent =
     CopilotSw.isFormFillGoal(normalizedGoal) ||
     CopilotSw.isFormSubmitGoal(normalizedGoal) ||
     (typeof CopilotSw.isFormClearGoal === 'function' && CopilotSw.isFormClearGoal(normalizedGoal));
 
+  return {
+    needsExtraction: isExtractionIntent,
+    needsFormFill: isFormIntent || !!session?.active,
+    needsSubmit: CopilotSw.isFormSubmitGoal(normalizedGoal) || CopilotSw.isSubmitIntent(goal),
+    needsClear:
+      typeof CopilotSw.isFormClearGoal === 'function' ? CopilotSw.isFormClearGoal(normalizedGoal) : false,
+    needsClarification: false,
+    clarificationQuestion: '',
+    reason: 'fallback-intent-heuristic',
+  };
+}
+
+async function resolveIntentPlan(goal, pageContext, formsInventory) {
+  try {
+    const plan = await CopilotSw.requestIntentPlan(
+      goal,
+      pageContext,
+      formsInventory,
+      CopilotSw.agentState.chatHistory,
+    );
+
+    if (
+      !plan ||
+      typeof plan.needsExtraction !== 'boolean' ||
+      typeof plan.needsFormFill !== 'boolean' ||
+      typeof plan.needsSubmit !== 'boolean' ||
+      typeof plan.needsClear !== 'boolean'
+    ) {
+      throw new Error('Invalid intent plan shape');
+    }
+    return plan;
+  } catch {
+    return resolveFallbackIntentPlan(goal, CopilotSw.agentState.formSession || {});
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FORM WORKFLOW HANDLER
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * If the model asked "list vs order" and the user says yes, prefer extraction/listing (non-destructive)
+ * instead of looping on needs_clarification.
+ */
+function relaxAffirmativeClarification(goal, chatHistory, plan) {
+  if (!plan?.needsClarification) return plan;
+
+  const raw = String(goal || '').trim();
+  if (!/^(yes|yeah|yep|sure|ok|y)(\s*[!.])?$/i.test(raw)) return plan;
+
+  const assistants = (chatHistory || []).filter((m) => m?.role === 'assistant');
+  const lastAssistant = assistants.length ? assistants[assistants.length - 1] : null;
+  const prev = String(lastAssistant?.content || '').toLowerCase();
+  if (!prev.includes('?')) return plan;
+
+  const offeredAlternatives =
+    /\bor\b/.test(prev) &&
+    ((/\blist\b|\ball\b|\bsee\b|\bshow\b|\bfetch\b|\bproducts?\b|\bavailable\b/.test(prev) &&
+      /\border\b|\bform\b|\bfill\b|\bplace\b|\bsubmit\b/.test(prev)) ||
+      (/\bview\b|\bsee\b/.test(prev) && /\border\b|\bpurchase\b/.test(prev)));
+
+  if (!offeredAlternatives) return plan;
+
+  return {
+    ...plan,
+    needsClarification: false,
+    clarificationQuestion: '',
+    needsExtraction: true,
+    needsFormFill: false,
+    needsSubmit: false,
+    reason: `${plan.reason || ''}; affirmative-default-catalog`,
+  };
+}
+
+async function handleFormWorkflow(goal, pageContext, tabId) {
+  const session = CopilotSw.agentState.formSession || {};
+  const formsInventory = CopilotSw.buildFormsInventory(pageContext);
+  let intentPlan = await resolveIntentPlan(goal, pageContext, formsInventory);
+  intentPlan = relaxAffirmativeClarification(goal, CopilotSw.agentState.chatHistory, intentPlan);
+
   const isFormSessionActive = !!CopilotSw.agentState.formSession?.active;
-  const isCompoundIntent = isExtractionIntent && isFormIntent;
+  const isFormIntent =
+    intentPlan.needsFormFill ||
+    intentPlan.needsSubmit ||
+    intentPlan.needsClear ||
+    isFormSessionActive ||
+    !!session?.awaitingSubmitConfirmation;
+  const isCompoundIntent = intentPlan.needsExtraction && (intentPlan.needsFormFill || intentPlan.needsSubmit);
 
   if (session.awaitingExtractionValueConfirmation) {
     if (CopilotSw.isSubmitIntent(goal)) {
@@ -352,13 +432,31 @@ async function handleFormWorkflow(goal, pageContext, tabId) {
     return { handled: true };
   }
 
+  if (intentPlan.needsClarification && intentPlan.clarificationQuestion) {
+    CopilotSw.updateAgentStatus('finalizing', 'Need one clarification before proceeding.', true);
+    CopilotSw.agentState.chatHistory.push({
+      role: 'assistant',
+      content: intentPlan.clarificationQuestion,
+      timestamp: Date.now(),
+    });
+    return { handled: true };
+  }
+
   // Let ReAct own fresh compound goals so it can execute extraction first,
   // then field filling with tool calls in the same run.
   if (isCompoundIntent && !isFormSessionActive) {
     return null;
   }
 
-  const directFormWorkflowAnswer = await CopilotSw.tryDirectFormWorkflow(goal, pageContext, tabId);
+  const directGoal = intentPlan.needsClear
+    ? 'clear the form'
+    : intentPlan.needsSubmit && !intentPlan.needsFormFill
+      ? 'submit the form'
+      : goal;
+
+  const directFormWorkflowAnswer = await CopilotSw.tryDirectFormWorkflow(directGoal, pageContext, tabId, {
+    treatAsFormFill: intentPlan.needsFormFill === true,
+  });
 
   if (!isFormSessionActive && !isFormIntent && !directFormWorkflowAnswer) {
     return null; // Not a form workflow — let the normal agent loop handle it
@@ -595,7 +693,19 @@ async function runAgentLoop(goal, tabId) {
 // PUBLIC API
 // ─────────────────────────────────────────────────────────────────────────────
 
-CopilotSw.clearAgentSession = async function clearAgentSession() {
+CopilotSw.clearAgentSession = async function clearAgentSession(tabId) {
+  await CopilotSw.loadAllTabSessions();
+  await CopilotSw.setActiveTabSession(tabId);
+
+  const anyRunning =
+    CopilotSw.activeLLMController != null ||
+    Object.keys(CopilotSw._tabSessions).some((k) => CopilotSw._tabSessions[k]?.isRunning);
+
+  if (anyRunning) {
+    await CopilotSw.abortInFlightAgentRun();
+    await CopilotSw.setActiveTabSession(tabId);
+  }
+
   CopilotSw.agentState.chatHistory = [];
   CopilotSw.agentState.currentGoal = null;
   CopilotSw.agentState.pageContext = null;
@@ -607,11 +717,6 @@ CopilotSw.clearAgentSession = async function clearAgentSession() {
     lastAskedField: null,
     filledFields: {},
   };
-
-  if (CopilotSw.activeLLMController) {
-    CopilotSw.activeLLMController.abort();
-    CopilotSw.activeLLMController = null;
-  }
 
   const approvalIds = Object.keys(CopilotSw.approvalPromises || {});
   approvalIds.forEach((approvalId) => {
@@ -631,9 +736,10 @@ CopilotSw.clearAgentSession = async function clearAgentSession() {
   };
 };
 
-CopilotSw.handleStartAgent = async function handleStartAgent(goal) {
+CopilotSw.handleStartAgent = async function handleStartAgent(goal, tabId) {
   try {
-    await CopilotSw.agentState.load();
+    await CopilotSw.abortInFlightAgentRun();
+    await CopilotSw.setActiveTabSession(tabId);
     ensureAgentStateShape();
 
     if (CopilotSw.agentState.isRunning) {
@@ -653,7 +759,7 @@ CopilotSw.handleStartAgent = async function handleStartAgent(goal) {
       true,
     );
 
-    const tab = await CopilotSw.getUsableTab();
+    const tab = await CopilotSw.resolveAgentTab(tabId);
 
     // Ensure content scripts are injected on this tab
     await CopilotSw.ensureContentScriptInjected(tab.id);

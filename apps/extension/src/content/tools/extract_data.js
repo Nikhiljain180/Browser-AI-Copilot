@@ -141,6 +141,20 @@ function extractStructuredItems(target) {
   try {
     const container = target ? document.querySelector(target) || document.body : document.body;
 
+    let items = [];
+
+    const tbodyRows = container.querySelectorAll('table tbody tr');
+    if (tbodyRows.length >= 2) {
+      items = Array.from(tbodyRows);
+    } else {
+      const ariaRows = Array.from(container.querySelectorAll('[role="row"]')).filter(
+        (row) => !row.closest('thead') && row.closest('tbody, table, [role="table"], [role="grid"]'),
+      );
+      if (ariaRows.length >= 2) {
+        items = ariaRows;
+      }
+    }
+
     // Find repeating item containers
     const itemSelectors = [
       '[data-product-id]',
@@ -158,12 +172,13 @@ function extractStructuredItems(target) {
       'tr',
     ];
 
-    let items = [];
-    for (const selector of itemSelectors) {
-      const found = container.querySelectorAll(selector);
-      if (found.length >= 2) {
-        items = Array.from(found);
-        break;
+    if (items.length === 0) {
+      for (const selector of itemSelectors) {
+        const found = container.querySelectorAll(selector);
+        if (found.length >= 2) {
+          items = Array.from(found);
+          break;
+        }
       }
     }
 

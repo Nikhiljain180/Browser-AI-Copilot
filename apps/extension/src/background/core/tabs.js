@@ -63,6 +63,25 @@ CopilotSw.ensureContentScriptInjected = async function ensureContentScriptInject
   }
 };
 
+CopilotSw.resolveAgentTab = async function resolveAgentTab(tabId) {
+  if (tabId == null) {
+    throw new Error('Missing browser tab for this request.');
+  }
+  let tab;
+  try {
+    tab = await chrome.tabs.get(tabId);
+  } catch (_) {
+    tab = null;
+  }
+  if (!tab?.id) {
+    throw new Error('That browser tab is no longer available.');
+  }
+  if (tab.url && CopilotSw.isRestrictedUrl(tab.url)) {
+    throw new Error('Open the Copilot on a normal web page, then try again.');
+  }
+  return tab;
+};
+
 CopilotSw.getUsableTab = async function getUsableTab() {
   const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
   if (activeTab?.id) {
