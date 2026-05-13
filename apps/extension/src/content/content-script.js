@@ -38,7 +38,14 @@ async function handleMessage(request) {
       };
 
     case 'readPage':
-      return extractAccessibilityTree(request.focusArea);
+      return extractAccessibilityTree(request.focusArea, {
+        rankingQuery: request.rankingQuery || '',
+        listingRankPool: request.listingRankPool,
+        listingShortlistDefault: request.listingShortlistDefault,
+        listingShortlistMax: request.listingShortlistMax,
+        readMode: request.readMode === 'light' ? 'light' : 'full',
+        prefetchListingScroll: request.prefetchListingScroll === true,
+      });
 
     case 'executeTool':
       return executeTool(request.toolName, request.toolInput || {});
@@ -145,13 +152,29 @@ const TOOL_REGISTRY = {
   click_element: {
     description: 'Click an element on the page',
     params: {
-      required: ['selector'],
-      optional: ['description', 'clickType', 'hoverFirst', 'force'],
+      required: [],
+      optional: [
+        'selector',
+        'agentId',
+        'agent_id',
+        'description',
+        'clickType',
+        'hoverFirst',
+        'force',
+      ],
     },
     execute: (input) => {
+      const sel = String(input.selector || '').trim();
+      const aid = input.agentId || input.agent_id;
+      if (!sel && !aid) {
+        return {
+          error:
+            'click_element requires a CSS selector or agentId/agent_id from the page inventory (Forms Field Inventory or listing elements).',
+        };
+      }
       const target = {
-        selector: input.selector,
-        agentId: input.agentId || input.agent_id,
+        selector: sel || undefined,
+        agentId: aid,
       };
       const options = {
         description: input.description,
@@ -174,6 +197,12 @@ const TOOL_REGISTRY = {
       };
       return fillInput(target, input.value);
     },
+  },
+
+  dispatch_enter_on_field: {
+    description: 'Dispatch Enter on a focused field (e.g. run site search after typing)',
+    params: { required: [], optional: ['selector', 'agentId', 'agent_id'] },
+    execute: (input) => dispatchEnterOnField(input),
   },
 
   // ── Drafting ──

@@ -15,6 +15,7 @@
       ref="chatFeedRef"
       :is-hydrated="chat.isHydrated.value"
       :is-running="agent.isRunning.value"
+      :browser-tab-id="activeTabId"
       :visible-messages="chat.visibleMessages.value"
       :live-phase-label="agent.livePhaseLabel.value"
       :live-status-detail="agent.liveStatusDetail.value"
@@ -228,8 +229,20 @@ async function startNewChat() {
   }
 }
 
-function handleRuntimeMessage(message) {
+const runtimeMessageHandler = (message, sender) => {
   if (message.action === 'pageContextChanged') {
+    const tid = sender?.tab?.id;
+    if (tid != null && activeTabId.value != null && tid === activeTabId.value) {
+      scheduleRefreshChatForActiveTab();
+    }
+    return;
+  }
+
+  if (message.action === 'chatHistoryUpdated') {
+    if (message.tabId != null && activeTabId.value != null && message.tabId !== activeTabId.value) {
+      return;
+    }
+    void refreshChatForActiveTab();
     return;
   }
 
@@ -273,7 +286,12 @@ function handleRuntimeMessage(message) {
     if (message.phase === 'acting') chat.pushLiveThought(agent.polishedAction.value);
     if (message.phase === 'finalizing') chat.pushLiveThought('Composing the response');
   }
-}
+};
+
+/** Passed to chrome.runtime listeners so removeListener removes the correct reference */
+const runtimeListener = (message, sender) => runtimeMessageHandler(message, sender);
+
+let tabUpdatedListener = null;
 
 watch(
   [chat.visibleMessages, agent.isRunning, agent.phaseDetail, chat.liveThoughtLines],
@@ -282,10 +300,17 @@ watch(
 );
 
 onMounted(async () => {
-  chrome.runtime.onMessage.addListener(handleRuntimeMessage);
+  chrome.runtime.onMessage.addListener(runtimeListener);
 
   tabActivateListener = () => scheduleRefreshChatForActiveTab();
   chrome.tabs.onActivated.addListener(tabActivateListener);
+
+  tabUpdatedListener = (changedTabId, changeInfo) => {
+    if (changeInfo.url == null || activeTabId.value == null) return;
+    if (changedTabId !== activeTabId.value) return;
+    scheduleRefreshChatForActiveTab();
+  };
+  chrome.tabs.onUpdated.addListener(tabUpdatedListener);
 
   await refreshChatForActiveTab();
 
@@ -298,7 +323,8 @@ onMounted(async () => {
 
   await chat.scrollChatToBottom();
   health.startHealthCheckPolling();
-  theme.loadTheme();});
+  theme.loadTheme();
+});
 
 onUnmounted(() => {
   clearTimeout(refreshChatDebounceTimer);
@@ -307,7 +333,11 @@ onUnmounted(() => {
     chrome.tabs.onActivated.removeListener(tabActivateListener);
     tabActivateListener = null;
   }
-  chrome.runtime.onMessage.removeListener(handleRuntimeMessage);
+  if (tabUpdatedListener) {
+    chrome.tabs.onUpdated.removeListener(tabUpdatedListener);
+    tabUpdatedListener = null;
+  }
+  chrome.runtime.onMessage.removeListener(runtimeListener);
   chat.destroyScrollObservers();
   health.stopHealthCheckPolling();
   if (errorTimeoutId) {

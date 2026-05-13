@@ -6,6 +6,7 @@ import {
   buildPendingFieldMapMessages,
   callLLMWithTimeout,
 } from '../services/llmService';
+import { mockedIntentPlanContent } from '../services/e2eMockAgentLlm';
 import { ChatMessage, FormPlanRequestBody, PageContext } from '../types';
 
 const router = Router();
@@ -57,6 +58,15 @@ router.post(
 
     if (!goal) {
       return res.status(400).json({ error: 'goal is required' });
+    }
+
+    if (process.env.E2E_MOCK_AGENT === '1') {
+      console.log('[Form Mock] POST /intent-plan');
+      return res.json({
+        success: true,
+        content: mockedIntentPlanContent(),
+        timestamp: Date.now(),
+      });
     }
 
     const messages = buildIntentPlanMessages(goal, pageContext, forms, chatHistory);

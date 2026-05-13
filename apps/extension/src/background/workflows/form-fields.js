@@ -174,7 +174,7 @@ CopilotSw.buildFormsInventory = function buildFormsInventory(pageContext) {
       intent: 'unknown',
     }));
 
-  if (extraFields.length === 0) return forms;
+  if (extraFields.length === 0 && extraButtons.length === 0) return forms;
 
   return [
     ...forms,
@@ -182,7 +182,7 @@ CopilotSw.buildFormsInventory = function buildFormsInventory(pageContext) {
       id: 'page_inputs',
       agentId: 'page_inputs',
       selector: '',
-      title: 'Page inputs',
+      title: extraFields.length > 0 ? 'Page inputs' : 'Page actions',
       fields: extraFields,
       buttons: extraButtons,
       submitButtons: [],

@@ -454,3 +454,41 @@ function fireAllEvents(element) {
     element.dispatchEvent(new Event(eventType, { bubbles: true }));
   });
 }
+
+/**
+ * Dispatch Enter on an input (search submit). Used by optional auto-submit after fill_input.
+ */
+function dispatchEnterOnField(input) {
+  try {
+    const element = resolveElement({
+      selector: input.selector,
+      agentId: input.agentId || input.agent_id,
+    });
+    if (!element) {
+      return {
+        error: `Input not found: ${input?.agentId || input?.agent_id || input?.selector || 'unknown target'}`,
+      };
+    }
+
+    element.focus();
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    const keyOpts = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true };
+    element.dispatchEvent(new KeyboardEvent('keydown', keyOpts));
+    element.dispatchEvent(new KeyboardEvent('keypress', keyOpts));
+    element.dispatchEvent(new KeyboardEvent('keyup', keyOpts));
+
+    const form = element.closest('form');
+    if (form && typeof form.requestSubmit === 'function') {
+      try {
+        form.requestSubmit(element);
+      } catch {
+        /* ignore double-submit errors */
+      }
+    }
+
+    return { success: true, message: '✓ Dispatched Enter on field' };
+  } catch (error) {
+    return { error: error.message };
+  }
+}

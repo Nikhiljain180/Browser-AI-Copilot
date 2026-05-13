@@ -45,7 +45,7 @@ function clickElement(target, options = {}) {
           } else {
             resolve(performClick(element, clickType, hoverFirst, description));
           }
-        }, 500);
+        }, 650);
       });
     }
 

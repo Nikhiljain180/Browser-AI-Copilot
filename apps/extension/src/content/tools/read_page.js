@@ -6,9 +6,11 @@
  * ═══════════════════════════════════════════════════════════════
  */
 
-async function extractAccessibilityTree(focusArea = null) {
+async function extractAccessibilityTree(focusArea = null, listingOptions = {}) {
+  const lightRead = listingOptions?.readMode === 'light';
+
   // Wait for dynamic content to render
-  await new Promise((resolve) => setTimeout(resolve, 150));
+  await new Promise((resolve) => setTimeout(resolve, lightRead ? 80 : 150));
 
   // Clear previous registry
   pageElementRegistry.clear();
@@ -61,17 +63,66 @@ async function extractAccessibilityTree(focusArea = null) {
     focusArea: focusArea || null,
   };
 
+  tree._lightRead = lightRead;
+
   // Determine root for extraction
   const root = getExtractionRoot(focusArea);
+
+  if (!lightRead && listingOptions?.prefetchListingScroll === true) {
+    try {
+      root.scrollBy({ top: Math.min(900, window.innerHeight * 1.05), behavior: 'instant' });
+      await new Promise((resolve) => setTimeout(resolve, 280));
+    } catch {
+      /* ignore */
+    }
+  }
 
   // Extract everything
   extractPageStructure(tree, root);
   extractAllInteractiveElements(tree, root);
+  harvestPurchaseCtaByVisibleText(tree, root);
+  harvestOrderflowContinueByVisibleText(tree, root);
   extractAllForms(tree, root);
-  extractAllTables(tree, root);
-  extractAllLists(tree, root);
+  if (!lightRead) {
+    extractAllTables(tree, root);
+    extractAllLists(tree, root);
+  }
   extractCardPatterns(tree, root);
   extractTextSummary(tree, root);
+
+  tree.url = tree.meta?.url || window.location.href;
+  tree.title = tree.meta?.title || document.title;
+  tree.textContent = tree.textSummary?.fullText || '';
+
+  const loc = tree.url || tree.meta?.url || window.location.href;
+  tree.retailPageProfile = {
+    /** True when this document URL looks like a single-product PDP (not a SERP). Used to skip listing chips / pick guards on carousels. */
+    likelyProductDetailPage: looksLikeRetailProductDetailUrl(loc, loc),
+  };
+
+  const rankPoolRaw = Number(listingOptions?.listingRankPool) > 0 ? Number(listingOptions.listingRankPool) : 48;
+  const rankPool = lightRead ? Math.min(rankPoolRaw, 12) : rankPoolRaw;
+  let shortMax = Number(listingOptions?.listingShortlistMax) > 0 ? Number(listingOptions.listingShortlistMax) : 10;
+  const shortDef = Number(listingOptions?.listingShortlistDefault) > 0 ? Number(listingOptions.listingShortlistDefault) : 5;
+  shortMax = Math.max(shortMax, shortDef);
+  let raw = deriveListingCandidates(tree, rankPool);
+  const linkHarvest = deriveListingCandidatesFromProductLinks(tree, rankPool);
+  if (!raw.length) {
+    raw = linkHarvest;
+  } else {
+    enrichRawListingsWithProductLinkUrls(raw, linkHarvest, loc);
+  }
+  raw = raw.filter((row) => listingCandidateRowIsUsable(row));
+  const ranked = rankListingCandidates(raw, listingOptions?.rankingQuery || '', shortMax);
+  const rankedFiltered = ranked.filter((row) => listingCandidateRowIsUsable(row));
+
+  tree.listingCandidates = rankedFiltered;
+  tree.listingCandidatesMeta = {
+    pooledCount: raw.length,
+    rankedShown: rankedFiltered.length,
+    primaryShortlistDefault: shortDef,
+    rankPool,
+  };
 
   // Observe for dynamic changes
   observeDOMChanges();
@@ -79,6 +130,377 @@ async function extractAccessibilityTree(focusArea = null) {
   // Apply token budget (prioritized)
   const result = applyTokenBudget(tree);
   return result;
+}
+
+/**
+ * Drop obvious non-product rows (bad card titles, merged blobs) before ranking / shortlist.
+ */
+function listingCandidateRowIsUsable(row) {
+  const n = String(row?.name || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (n.length < 4) return false;
+  const low = n.toLowerCase();
+  if (low === 'p' || low === 'add' || low === 'buy' || low === 'off') return false;
+  if (/^\d+\.\s*\d+\.\s/.test(n)) return false;
+  if (/^\d+\s*[,，]\s*\d+\s*rating/i.test(n) && n.length > 120) return false;
+  return true;
+}
+
+/**
+ * Flatten card groups into a compact list for the LLM / task workflow (domain-agnostic).
+ */
+function deriveListingCandidates(tree, maxItems) {
+  const out = [];
+  if (!Array.isArray(tree.cards)) return out;
+  for (const group of tree.cards) {
+    const items = Array.isArray(group.items) ? group.items : [];
+    for (const item of items) {
+      if (out.length >= maxItems) return out;
+      const actions = Array.isArray(item.actions) ? item.actions : [];
+      const addToCartHeuristic = actions.some((a) =>
+        /add\s+to\s+(cart|bag)|buy\s+now|buy\s+at|add\s+to\s+list/i.test(String(a.text || '')),
+      );
+      const row = {
+        candidateId: String(out.length + 1),
+        agentId: item.agentId || null,
+        groupAgentId: group.agentId || null,
+        name: item.name || (item.text ? String(item.text).slice(0, 120) : ''),
+        price: item.price || '',
+        hasAddToCartCta: addToCartHeuristic,
+      };
+      if (item.detailUrl) row.detailUrl = item.detailUrl;
+      out.push(row);
+    }
+  }
+  return out;
+}
+
+/**
+ * When card-based harvest is empty (common on modern retail SERPs), infer candidates from
+ * same-origin links that look like product detail pages (Flipkart /itm…, Amazon /dp/, eBay, Shopify, etc.).
+ */
+function looksLikeRetailProductDetailUrl(hrefStr, baseHref) {
+  try {
+    const base = baseHref ? new URL(baseHref, window.location.href) : new URL(window.location.href);
+    const u = new URL(hrefStr, base);
+    if (!/^https?:$/i.test(u.protocol)) return false;
+    if (u.hostname !== base.hostname) return false;
+    const p = u.pathname;
+    // Flipkart / similar (itm id in path)
+    if (/itm[a-z0-9]{6,}/i.test(p)) return true;
+    // Amazon
+    if (/\/(?:dp|gp\/product)\/[A-Z0-9]{8,}/i.test(p)) return true;
+    // Walmart / Target-style /ip/
+    if (/\/ip\/[^/]+/i.test(p)) return true;
+    // eBay
+    if (/\/itm\/\d{6,}/i.test(p)) return true;
+    // Etsy
+    if (/\/listing\/\d+/i.test(p)) return true;
+    // Shopify (product handle; avoid bare /products)
+    if (/\/products\/[a-z0-9][a-z0-9\-_%]{2,}\/?$/i.test(p)) return true;
+    // Target: /p/title/-/A-12345678
+    if (/\/p\/[^/]+\/-\/A-\d+/i.test(p)) return true;
+    // Best Buy: .../1234567.p or /site/.../slug/123.p
+    if (/\/\d{5,}\.p(?:\?|$|\/)/i.test(p)) return true;
+    if (/\/site\/[^/]+\/[^/]+\/\d+\.p\b/i.test(p)) return true;
+    // Wayfair
+    if (/\/pdp\/[^/]+/i.test(p)) return true;
+    // Costco / legacy retail
+    if (/\/product\.html/i.test(p)) return true;
+    // WooCommerce / generic /product/slug (last segment; avoid hub pages)
+    if (/\/product\/[a-z0-9][a-z0-9\-_%]{2,}\/?$/i.test(p) && !/(?:category|categories|search|tag|shop)\b/i.test(p)) {
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function shouldSkipRetailListingUrl(u) {
+  const p = u.pathname.toLowerCase();
+  if (
+    /(?:^|\/)(?:login|signin|signup|account|accounts|register|cart|viewcart|checkout|wishlist|help|travel|payments|seller)(?:\/|$)/i.test(
+      p,
+    )
+  ) {
+    return true;
+  }
+  if (/\/search|\/browse|\/s\?|\/store/i.test(p)) return true;
+  // Shopify collection index (not a single product)
+  if (/^\/collections\/[^/]+\/?$/i.test(p)) return true;
+  if (/\/collections\/[^/]+\/products\/?$/i.test(p)) return true;
+  return false;
+}
+
+/**
+ * First same-origin PDP link inside a product card (for direct navigation without extra reads).
+ */
+function pickProductDetailHrefFromCard(cardEl, baseHref) {
+  const loc = baseHref || window.location.href;
+  const anchors = cardEl.querySelectorAll('a[href]');
+  for (let i = 0; i < anchors.length; i += 1) {
+    const href = anchors[i].href;
+    if (!href || !looksLikeRetailProductDetailUrl(href, loc)) continue;
+    let u;
+    try {
+      u = new URL(href, loc);
+    } catch {
+      continue;
+    }
+    if (shouldSkipRetailListingUrl(u)) continue;
+    return href.length > 2048 ? href.slice(0, 2048) : href;
+  }
+  return '';
+}
+
+/**
+ * Fill missing detailUrl on card rows using product-link harvest (name overlap, deduped).
+ */
+function enrichRawListingsWithProductLinkUrls(raw, fromLinks, loc) {
+  if (!Array.isArray(raw) || !Array.isArray(fromLinks) || !fromLinks.length) return raw;
+  const locStr = String(loc || '');
+  const used = new Set();
+  for (let i = 0; i < raw.length; i += 1) {
+    const r = raw[i];
+    if (r && r.detailUrl) {
+      const k = retailProductUrlDedupeKey(r.detailUrl, locStr);
+      if (k) used.add(k);
+    }
+  }
+  for (let i = 0; i < raw.length; i += 1) {
+    const r = raw[i];
+    if (!r || r.detailUrl) continue;
+    const nameLow = String(r.name || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]+/g, ' ')
+      .trim();
+    const nameTokens = nameLow.split(/\s+/).filter((t) => t.length >= 2);
+    for (let j = 0; j < fromLinks.length; j += 1) {
+      const L = fromLinks[j];
+      if (!L || !L.detailUrl) continue;
+      const k = retailProductUrlDedupeKey(L.detailUrl, locStr);
+      if (!k || used.has(k)) continue;
+      const ln = String(L.name || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]+/g, ' ')
+        .trim();
+      let match = false;
+      if (nameLow && ln && (nameLow.includes(ln) || ln.includes(nameLow))) {
+        match = true;
+      } else if (nameTokens.length && ln) {
+        const lt = ln.split(/\s+/).filter((t) => t.length >= 2);
+        let overlap = 0;
+        for (let ti = 0; ti < nameTokens.length; ti += 1) {
+          const t = nameTokens[ti];
+          for (let li = 0; li < lt.length; li += 1) {
+            const x = lt[li];
+            if (x.includes(t) || t.includes(x)) {
+              overlap += 1;
+              break;
+            }
+          }
+        }
+        if (overlap >= Math.min(2, nameTokens.length)) match = true;
+      }
+      if (match) {
+        r.detailUrl = L.detailUrl;
+        used.add(k);
+        break;
+      }
+    }
+  }
+  return raw;
+}
+
+function retailProductUrlDedupeKey(hrefStr, baseHref) {
+  try {
+    const u = new URL(hrefStr, baseHref);
+    const p = u.pathname;
+
+    const flip = p.match(/(itm[a-z0-9]+)/i);
+    if (flip) return flip[1].toLowerCase();
+
+    const amz = p.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})/i);
+    if (amz) return `dp:${amz[1]}`;
+
+    const ip = p.match(/\/ip\/([^/?#]+)/i);
+    if (ip) return `ip:${ip[1].toLowerCase()}`;
+
+    const ebay = p.match(/\/itm\/(\d{6,})/i);
+    if (ebay) return `ebay:${ebay[1]}`;
+
+    const etsy = p.match(/\/listing\/(\d+)/i);
+    if (etsy) return `etsy:${etsy[1]}`;
+
+    const shop = p.match(/\/products\/([a-z0-9][a-z0-9\-_%]*)\/?$/i);
+    if (shop) return `shopify:${shop[1].toLowerCase()}`;
+
+    const tgt = p.match(/\/A-(\d+)/i);
+    if (tgt) return `target:A-${tgt[1]}`;
+
+    const bb = p.match(/\/(\d{5,})\.p\b/i);
+    if (bb) return `bb:${bb[1]}`;
+
+    const wf = p.match(/\/pdp\/([^/?#]+)/i);
+    if (wf) return `wf:${wf[1].toLowerCase()}`;
+
+    const woo = p.match(/\/product\/([a-z0-9][a-z0-9\-_%]*)\/?$/i);
+    if (woo) return `product:${woo[1].toLowerCase()}`;
+
+    return `${u.origin}${p.split('?')[0]}`;
+  } catch {
+    return null;
+  }
+}
+
+function titleFromProductPath(pathname) {
+  const parts = String(pathname || '')
+    .split('/')
+    .filter(Boolean);
+  const seg = parts.length >= 2 ? parts[parts.length - 2] : parts[0] || '';
+  const decoded = decodeURIComponent(seg).replace(/-/g, ' ').replace(/\+/g, ' ');
+  return decoded.replace(/\s+/g, ' ').trim();
+}
+
+function deriveListingCandidatesFromProductLinks(tree, maxItems) {
+  const out = [];
+  const seen = new Set();
+  const loc = tree.url || window.location.href;
+  const links = Array.isArray(tree.links) ? tree.links : [];
+
+  for (const link of links) {
+    if (out.length >= maxItems) break;
+    const href = link.href;
+    if (!href || !looksLikeRetailProductDetailUrl(href, loc)) continue;
+
+    let u;
+    try {
+      u = new URL(href, loc);
+    } catch {
+      continue;
+    }
+    if (shouldSkipRetailListingUrl(u)) continue;
+
+    const key = retailProductUrlDedupeKey(href, loc);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+
+    let name = String(link.text || link.ariaLabel || link.label || '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 120);
+    if (name.length < 3) {
+      name = titleFromProductPath(u.pathname).slice(0, 120) || 'Product';
+    }
+
+    const safeHref = href.length > 2048 ? href.slice(0, 2048) : href;
+    out.push({
+      candidateId: String(out.length + 1),
+      agentId: link.agentId || null,
+      groupAgentId: null,
+      name,
+      price: '',
+      hasAddToCartCta: false,
+      detailUrl: safeHref,
+    });
+  }
+
+  return out;
+}
+
+function tokenizeRankingQuery(text) {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]+/g, ' ')
+    .split(/\s+/)
+    .filter((t) => t.length >= 2);
+}
+
+function parseMaxPriceFromHint(query) {
+  const s = String(query || '').toLowerCase();
+  let best = null;
+
+  const re = /\b(?:under|below|less\s+than|max|maximum|within|≤|<=|<)\s*(?:usd\s*|₹|rs\.?\s*|inr\s*)?\$?\s*([\d,.]+)/gi;
+  let m;
+  while ((m = re.exec(s)) !== null) {
+    const n = parseFloat(String(m[1]).replace(/,/g, ''));
+    if (!Number.isNaN(n)) best = best == null ? n : Math.max(best, n);
+  }
+  const dollarFirst = /\$\s*([\d,.]+)\b/g;
+  while ((m = dollarFirst.exec(s)) !== null) {
+    const n = parseFloat(String(m[1]).replace(/,/g, ''));
+    if (!Number.isNaN(n) && /\b(under|below|budget|limit|around|within)\b/i.test(query)) {
+      best = best == null ? n : Math.max(best, n);
+      break;
+    }
+  }
+
+  return best;
+}
+
+function parseProductPriceUsd(priceStr) {
+  const s = String(priceStr || '');
+  const m = s.match(/\$\s*([\d,.]+)/);
+  if (!m) return null;
+  const n = parseFloat(String(m[1]).replace(/,/g, ''));
+  return Number.isNaN(n) ? null : n;
+}
+
+function parseProductPriceInr(priceStr) {
+  const s = String(priceStr || '').replace(/\u00a0/g, ' ');
+  const m = s.match(/(?:₹|rs\.?|inr)\s*[:\s]*\s*([\d,]+(?:\.\d+)?)/i);
+  if (!m) return null;
+  const n = parseFloat(String(m[1]).replace(/,/g, ''));
+  return Number.isNaN(n) ? null : n;
+}
+
+/**
+ * Generic SERP/card ranking — no retailer names: token overlap, add-to-cart, price hint, DOM order bias.
+ */
+function rankListingCandidates(raw, rankingQuery, shortlistMax) {
+  const queryTokens = tokenizeRankingQuery(rankingQuery);
+  const maxPrice = parseMaxPriceFromHint(rankingQuery);
+
+  const scored = raw.map((candidate, ordinal) => {
+    let score = 0;
+    const nameLow = String(candidate.name || '').toLowerCase();
+    const priceNum = parseProductPriceUsd(candidate.price) ?? parseProductPriceInr(candidate.price);
+
+    for (const tok of queryTokens) {
+      if (nameLow.includes(tok)) score += 2;
+    }
+    if (candidate.hasAddToCartCta) score += 5;
+
+    score -= ordinal * 0.02;
+
+    if (maxPrice != null && priceNum != null) {
+      if (priceNum <= maxPrice + 0.009) score += 4;
+      else score -= 6;
+    }
+
+    return { candidate, score, ordinal };
+  });
+
+  scored.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return a.ordinal - b.ordinal;
+  });
+
+  const cap = Math.min(Math.max(1, shortlistMax), scored.length);
+  return scored.slice(0, cap).map((row, idx) => {
+    const rowOut = {
+      candidateId: String(idx + 1),
+      agentId: row.candidate.agentId || null,
+      groupAgentId: row.candidate.groupAgentId || null,
+      name: row.candidate.name,
+      price: row.candidate.price,
+      hasAddToCartCta: row.candidate.hasAddToCartCta,
+    };
+    if (row.candidate.detailUrl) rowOut.detailUrl = row.candidate.detailUrl;
+    return rowOut;
+  });
 }
 
 // ═══════════════════════════════════════════════════
@@ -314,7 +736,7 @@ function extractPageStructure(tree, root) {
         itemCount: countRepeatingItems(section),
       });
 
-      if (tree.sections.length >= 15) return;
+      if (tree.sections.length >= (tree._lightRead ? 5 : 15)) return;
     });
   });
 }
@@ -322,6 +744,63 @@ function extractPageStructure(tree, root) {
 // ═══════════════════════════════════════════════════
 // INTERACTIVE ELEMENTS (comprehensive)
 // ═══════════════════════════════════════════════════
+
+/**
+ * Id, name, title, formaction, and capped attribute values — for CTAs like
+ * `<input name="submit.buy-now" title="Buy Now" formaction=".../buynow">` with no innerText.
+ */
+function buildPurchaseAttrHaystack(el) {
+  if (!el || el.nodeType !== 1 || !el.attributes) return '';
+  const chunks = [];
+  const push = (s) => {
+    const t = String(s || '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (t) chunks.push(t);
+  };
+  push(el.id);
+  push(el.name);
+  if (el.getAttribute) {
+    push(el.getAttribute('title'));
+    push(el.getAttribute('formaction'));
+    push(el.getAttribute('aria-label'));
+    push(el.getAttribute('aria-labelledby'));
+  }
+  if (el.tagName === 'INPUT' && el.value) push(el.value);
+
+  const attrs = el.attributes;
+  for (let i = 0; i < attrs.length; i += 1) {
+    const v = attrs[i].value;
+    if (!v) continue;
+    push(v.length > 280 ? `${v.slice(0, 277)}…` : v);
+  }
+
+  if (el.getAttribute) {
+    const ids = String(el.getAttribute('aria-labelledby') || '')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 4);
+    const doc = el.ownerDocument || (typeof document !== 'undefined' ? document : null);
+    if (doc && ids.length) {
+      for (let j = 0; j < ids.length; j += 1) {
+        try {
+          const ref = doc.getElementById(ids[j]);
+          if (ref) push(sanitizeText(ref.textContent || ref.innerText || ''));
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  }
+
+  return chunks
+    .join(' ')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 900);
+}
 
 function extractAllInteractiveElements(tree, root) {
   // Much broader selector — catches custom components too
@@ -366,6 +845,9 @@ function extractAllInteractiveElements(tree, root) {
     const tagName = el.tagName.toLowerCase();
     const type = el.type || el.getAttribute('role') || tagName;
 
+    const inputTy = tagName === 'input' ? String(el.type || '').toLowerCase() : '';
+    const isSubmitLikeInput = tagName === 'input' && ['submit', 'button', 'image'].includes(inputTy);
+
     const elementData = {
       agentId,
       tag: tagName,
@@ -397,11 +879,28 @@ function extractAllInteractiveElements(tree, root) {
       parentSection: getParentSectionTitle(el) || undefined,
     };
 
+    if (
+      tagName === 'button' ||
+      el.getAttribute('role') === 'button' ||
+      isSubmitLikeInput
+    ) {
+      elementData.id = el.id || undefined;
+      elementData.name = el.name || undefined;
+      elementData.title = el.getAttribute('title') || undefined;
+      if (isSubmitLikeInput && el.getAttribute('formaction')) {
+        elementData.formaction = el.getAttribute('formaction');
+      }
+      elementData.purchaseAttrHaystack = buildPurchaseAttrHaystack(el);
+    }
+
     tree.interactiveElements.push(elementData);
 
     // Also categorize
     if (tagName === 'button' || el.getAttribute('role') === 'button') {
       tree.buttons.push(elementData);
+    } else if (isSubmitLikeInput) {
+      tree.buttons.push(elementData);
+      tree.inputs.push(elementData);
     } else if (['input', 'select', 'textarea'].includes(tagName)) {
       tree.inputs.push(elementData);
     } else if (tagName === 'a') {
@@ -412,6 +911,214 @@ function extractAllInteractiveElements(tree, root) {
       });
     }
   });
+}
+
+/**
+ * Many retail PDPs render **Buy now** / **Buy at** / **Add to cart** as a styled div or span (not `<button>` and
+ * often without `role="button"`), including React Native Web label rows (`dir="auto"`, Inter bold).
+ * Those nodes are skipped by the broad interactive selector; harvest them by short visible text so
+ * they get agent_ids and appear in `buttons` for LLM + direct click.
+ * Runs on **light** reads too (transactional first pass often uses light mode); caps are tighter there.
+ */
+function harvestPurchaseCtaByVisibleText(tree, root) {
+  const registeredDom = new Set();
+  for (const el of pageElementRegistry.values()) {
+    if (el && el.nodeType === 1) registeredDom.add(el);
+  }
+
+  const light = Boolean(tree._lightRead);
+  const maxScan = light ? 2200 : 4000;
+  const maxKept = light ? 8 : 10;
+
+  const matchesCtaText = (t) => {
+    if (t.length < 6 || t.length > 72) return false;
+    return (
+      /\bbuy\s*now\b/i.test(t) ||
+      /\bbuy\s+at\b/i.test(t) ||
+      /\badd\s+to\s+cart\b/i.test(t) ||
+      /\badd\s+to\s+bag\b/i.test(t)
+    );
+  };
+
+  const matchesCtaAttrs = (el) => {
+    const h = buildPurchaseAttrHaystack(el);
+    if (!h || h.length < 6) return false;
+    const c = h.replace(/\s/g, '');
+    return (
+      /\bbuy\s*now\b/i.test(h) ||
+      /\bbuy-now\b/i.test(h) ||
+      /\bbuy[\s._]now\b/i.test(h) ||
+      /\bbuynow\b/i.test(c) ||
+      /\bbuy\s+at\b/i.test(h) ||
+      /\badd\s+to\s+cart\b/i.test(h) ||
+      /\badd-to-cart\b/i.test(h) ||
+      /\badd_to_cart\b/i.test(h) ||
+      /\badd\s+to\s+bag\b/i.test(h) ||
+      /\/buynow\b/i.test(h) ||
+      /\/addtocart\b/i.test(h)
+    );
+  };
+
+  // Use the same extraction root as the rest of read_page. Avoid picking a single
+  // `main` / `[class*="product"]` subtree first — document order can match a tiny
+  // unrelated node and skip CTAs (e.g. RN Web / Inter bold divs outside that hit).
+  const scope = root;
+  const nodes = scope.querySelectorAll('div, span, a, li, p');
+  const raw = [];
+  let scanned = 0;
+  for (let i = 0; i < nodes.length && scanned < maxScan; i += 1) {
+    scanned += 1;
+    const el = nodes[i];
+    const tag = el.tagName.toLowerCase();
+    if (tag === 'button' || el.getAttribute('role') === 'button') continue;
+    if (registeredDom.has(el)) continue;
+    if (!isElementVisible(el)) continue;
+    const t = sanitizeText(el.innerText || '');
+    if (!matchesCtaText(t) && !matchesCtaAttrs(el)) continue;
+    const rect = el.getBoundingClientRect();
+    const w = rect.width;
+    const h = rect.height;
+    if (w < 2 || h < 2 || w * h > 900000) continue;
+    raw.push({ el, area: w * h });
+  }
+
+  raw.sort((a, b) => a.area - b.area);
+  const kept = [];
+  for (let j = 0; j < raw.length; j += 1) {
+    const c = raw[j];
+    if (kept.some((k) => c.el.contains(k.el))) continue;
+    kept.push(c);
+    if (kept.length >= maxKept) break;
+  }
+
+  for (let purchaseIdx = 0; purchaseIdx < kept.length; purchaseIdx += 1) {
+    const el = kept[purchaseIdx].el;
+    const tagName = el.tagName.toLowerCase();
+    const agentId = registerElement(`purchase_cta_${purchaseIdx}`, el);
+    const elSelector = generateSelector(el);
+    const rect = el.getBoundingClientRect();
+    const isVisible = isElementVisible(el);
+    const elementData = {
+      agentId,
+      tag: tagName,
+      type: tagName,
+      text: getElementText(el),
+      selector: elSelector,
+      visible: isVisible,
+      disabled: isDisabled(el),
+      position: isVisible
+        ? {
+            x: Math.round(rect.left),
+            y: Math.round(rect.top),
+            width: Math.round(rect.width),
+            height: Math.round(rect.height),
+            inViewport: isElementInViewport(el),
+          }
+        : undefined,
+      ariaLabel: el.getAttribute('aria-label') || undefined,
+      ariaExpanded: el.getAttribute('aria-expanded') || undefined,
+      ariaChecked: el.getAttribute('aria-checked') || undefined,
+      ariaSelected: el.getAttribute('aria-selected') || undefined,
+      checked: undefined,
+      value: undefined,
+      label: getFieldLabel(el) || undefined,
+      parentSection: getParentSectionTitle(el) || undefined,
+    };
+
+    tree.interactiveElements.push(elementData);
+    tree.buttons.push(elementData);
+  }
+}
+
+/**
+ * Post-purchase / order-summary **Continue** as RN Web `div` labels (not used by the purchase picker).
+ */
+function matchesOrderflowContinueHarvestLabel(t) {
+  const s = sanitizeText(t || '');
+  const low = s.toLowerCase();
+  if (!low || low.length < 4 || low.length > 42) return false;
+  if (/\bcontinue\s+(reading|shopping|browsing)\b/i.test(low)) return false;
+  if (low === 'continue') return true;
+  if (/^continue to (checkout|payment|order)\b/i.test(low)) return true;
+  return false;
+}
+
+function harvestOrderflowContinueByVisibleText(tree, root) {
+  const registeredDom = new Set();
+  for (const el of pageElementRegistry.values()) {
+    if (el && el.nodeType === 1) registeredDom.add(el);
+  }
+
+  const light = Boolean(tree._lightRead);
+  const maxScan = light ? 1600 : 3200;
+  const maxKept = light ? 3 : 5;
+
+  const nodes = root.querySelectorAll('div, span, a, li, p');
+  const raw = [];
+  let scanned = 0;
+  for (let i = 0; i < nodes.length && scanned < maxScan; i += 1) {
+    scanned += 1;
+    const el = nodes[i];
+    const tag = el.tagName.toLowerCase();
+    if (tag === 'button' || el.getAttribute('role') === 'button') continue;
+    if (registeredDom.has(el)) continue;
+    if (!isElementVisible(el)) continue;
+    const t = sanitizeText(el.innerText || '');
+    const aria = sanitizeText(el.getAttribute('aria-label') || '');
+    if (!matchesOrderflowContinueHarvestLabel(t) && !matchesOrderflowContinueHarvestLabel(aria)) continue;
+    const rect = el.getBoundingClientRect();
+    const w = rect.width;
+    const h = rect.height;
+    if (w < 2 || h < 2 || w * h > 900000) continue;
+    raw.push({ el, area: w * h });
+  }
+
+  raw.sort((a, b) => a.area - b.area);
+  const kept = [];
+  for (let j = 0; j < raw.length; j += 1) {
+    const c = raw[j];
+    if (kept.some((k) => c.el.contains(k.el))) continue;
+    kept.push(c);
+    if (kept.length >= maxKept) break;
+  }
+
+  for (let idx = 0; idx < kept.length; idx += 1) {
+    const el = kept[idx].el;
+    const tagName = el.tagName.toLowerCase();
+    const agentId = registerElement(`orderflow_continue_${idx}`, el);
+    const elSelector = generateSelector(el);
+    const rect = el.getBoundingClientRect();
+    const isVisible = isElementVisible(el);
+    const elementData = {
+      agentId,
+      tag: tagName,
+      type: tagName,
+      text: getElementText(el),
+      selector: elSelector,
+      visible: isVisible,
+      disabled: isDisabled(el),
+      position: isVisible
+        ? {
+            x: Math.round(rect.left),
+            y: Math.round(rect.top),
+            width: Math.round(rect.width),
+            height: Math.round(rect.height),
+            inViewport: isElementInViewport(el),
+          }
+        : undefined,
+      ariaLabel: el.getAttribute('aria-label') || undefined,
+      ariaExpanded: el.getAttribute('aria-expanded') || undefined,
+      ariaChecked: el.getAttribute('aria-checked') || undefined,
+      ariaSelected: el.getAttribute('aria-selected') || undefined,
+      checked: undefined,
+      value: undefined,
+      label: getFieldLabel(el) || undefined,
+      parentSection: getParentSectionTitle(el) || undefined,
+    };
+
+    tree.interactiveElements.push(elementData);
+    tree.buttons.push(elementData);
+  }
 }
 
 // ═══════════════════════════════════════════════════
@@ -492,14 +1199,27 @@ function extractAllForms(tree, root) {
     form
       .querySelectorAll('button, input[type="submit"], input[type="button"], [role="button"]')
       .forEach((btn, btnIdx) => {
+        const btnText = sanitizeText(
+          btn.innerText ||
+            btn.value ||
+            btn.getAttribute('aria-label') ||
+            btn.getAttribute('title') ||
+            '',
+        );
         const buttonData = {
           agentId: registerElement(`${formData.agentId}_btn_${btnIdx}`, btn),
-          text: sanitizeText(btn.innerText || btn.value || btn.getAttribute('aria-label') || ''),
+          text: btnText,
           type: btn.type || 'button',
           disabled: isDisabled(btn),
           visible: isElementVisible(btn),
           selector: generateSelector(btn),
           intent: classifyButtonIntent(btn),
+          id: btn.id || undefined,
+          name: btn.name || undefined,
+          title: btn.getAttribute('title') || undefined,
+          ariaLabel: btn.getAttribute('aria-label') || undefined,
+          formaction: btn.getAttribute('formaction') || undefined,
+          purchaseAttrHaystack: buildPurchaseAttrHaystack(btn),
         };
 
         if (buttonData.intent === 'submit' || buttonData.type === 'submit') {
@@ -795,6 +1515,8 @@ function extractCardPatterns(tree, root) {
 
   gridSelectors.forEach((selector) => {
     root.querySelectorAll(selector).forEach((container) => {
+      if (tree._lightRead && tree.cards.length >= 2) return;
+
       const containerSelector = generateSelector(container);
       if (processedContainers.has(containerSelector)) return;
 
@@ -816,7 +1538,7 @@ function extractCardPatterns(tree, root) {
       let highestRating = { value: 0, index: -1 };
       let mostReviews = { value: 0, index: -1 };
 
-      const maxItems = 12;
+      const maxItems = tree._lightRead ? 4 : 12;
       items.slice(0, maxItems).forEach((card, cardIdx) => {
         const cardData = {
           index: cardIdx,
@@ -834,6 +1556,10 @@ function extractCardPatterns(tree, root) {
           card.getAttribute('aria-label') ||
           '';
         if (title) cardData.name = sanitizeText(title).substring(0, 120);
+
+        const baseHref = tree.meta?.url || window.location.href;
+        const detailHref = pickProductDetailHrefFromCard(card, baseHref);
+        if (detailHref) cardData.detailUrl = detailHref;
 
         // Extract rating
         const ratingEl = card.querySelector('[class*="rating"], [class*="star"], [data-rating]');
@@ -935,10 +1661,10 @@ function extractTextSummary(tree, root) {
   tree.textContentLength = rawText.length;
 
   // Instead of dumping raw text, provide a structured summary
-  tree.textSummary = buildTextSummary(mainContent, rawText);
+  tree.textSummary = buildTextSummary(mainContent, rawText, Boolean(tree._lightRead));
 }
 
-function buildTextSummary(root, fullText) {
+function buildTextSummary(root, fullText, lightRead) {
   const summary = {
     totalCharacters: fullText.length,
     totalWords: fullText.split(/\s+/).length,
@@ -953,13 +1679,14 @@ function buildTextSummary(root, fullText) {
   for (const p of paragraphs) {
     const text = sanitizeText(p.innerText);
     if (text.length > 50) {
-      summary.intro = text.substring(0, 300);
+      summary.intro = text.substring(0, lightRead ? 200 : 300);
       break;
     }
   }
 
+  const cap = lightRead ? 1200 : 8000;
   // Truncated full text as fallback
-  summary.fullText = sanitizeText(fullText).substring(0, 8000);
+  summary.fullText = sanitizeText(fullText).substring(0, cap);
 
   return summary;
 }

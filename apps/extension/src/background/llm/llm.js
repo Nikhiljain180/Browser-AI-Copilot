@@ -72,8 +72,12 @@ function tokenize(text) {
     .filter((token) => token.length >= 3);
 }
 
+function sectionTextBody(section) {
+  return String(section?.text ?? section?.contentPreview ?? '').trim();
+}
+
 function scoreSection(section, goalTokens) {
-  const haystack = `${section?.title || ''} ${section?.text || ''}`.toLowerCase();
+  const haystack = `${section?.title || ''} ${sectionTextBody(section)}`.toLowerCase();
   let score = 0;
   for (const token of goalTokens) {
     if (haystack.includes(token)) score += 1;
@@ -105,21 +109,144 @@ function clampText(text, maxChars) {
   return normalized.length <= maxChars ? normalized : normalized.slice(0, maxChars);
 }
 
+function shouldUseCompactPageContext(goal, pageContext) {
+  if (CopilotSw.isTaskWorkflowActive?.()) return true;
+  if (Array.isArray(pageContext?.listingCandidates) && pageContext.listingCandidates.length > 0) return true;
+  const linkHint = pageContext?.links?.length || 0;
+  if (linkHint > 150) return true;
+  const len =
+    Number(pageContext?.textContentLength) ||
+    String(pageContext?.textContent || pageContext?.textSummary?.fullText || '').length;
+  if (inferQueryType(goal) === 'informational') return true;
+  return len > 9000;
+}
+
+function sliceArr(arr, max) {
+  if (!Array.isArray(arr) || max <= 0) return [];
+  return arr.length <= max ? arr : arr.slice(0, max);
+}
+
+/**
+ * SERP and large retail pages register thousands of links/inputs. The backend only summarizes text +
+ * inventory slices, but the extension was JSON-stringifying the full tree → multi‑MB bodies and timeouts.
+ */
+function slimPageContextForLlmTransport(pageContext) {
+  if (!pageContext || typeof pageContext !== 'object') return pageContext;
+
+  const cfg = CopilotSw.CONFIG || {};
+  const linkCount = pageContext.links?.length || 0;
+  const heavy =
+    linkCount > (Number(cfg.PAGE_CONTEXT_HEAVY_LINK_THRESHOLD) || 120) ||
+    (pageContext.inputs?.length || 0) > 180 ||
+    (pageContext.interactiveElements?.length || 0) > 220;
+
+  const maxLinks = heavy ? Math.min(40, Number(cfg.PAGE_CONTEXT_MAX_LINKS) || 40) : Number(cfg.PAGE_CONTEXT_MAX_LINKS) || 80;
+  const maxButtons = heavy ? Math.min(32, Number(cfg.PAGE_CONTEXT_MAX_BUTTONS) || 32) : Number(cfg.PAGE_CONTEXT_MAX_BUTTONS) || 64;
+  const maxInputs = heavy ? Math.min(48, Number(cfg.PAGE_CONTEXT_MAX_INPUTS) || 48) : Number(cfg.PAGE_CONTEXT_MAX_INPUTS) || 96;
+  const maxInter = Number(cfg.PAGE_CONTEXT_MAX_INTERACTIVE_ELEMENTS) || 56;
+  const maxForms = Number(cfg.PAGE_CONTEXT_MAX_FORMS) || 6;
+  const maxFields = Number(cfg.PAGE_CONTEXT_MAX_FIELDS_PER_FORM) || 14;
+
+  const hasListings =
+    Array.isArray(pageContext.listingCandidates) && pageContext.listingCandidates.length > 0;
+  const suppressListingHeavySlice =
+    pageContext.retailPageProfile?.likelyProductDetailPage === true;
+
+  if (heavy && hasListings && !suppressListingHeavySlice) {
+    return {
+      url: pageContext.url,
+      title: pageContext.title,
+      meta: pageContext.meta,
+      state: pageContext.state,
+      landmarks: pageContext.landmarks,
+      headingHierarchy: pageContext.headingHierarchy,
+      listingCandidates: pageContext.listingCandidates,
+      listingCandidatesMeta: pageContext.listingCandidatesMeta,
+      sections: pageContext.sections,
+      textContent: pageContext.textContent,
+      textContentLength: pageContext.textContentLength,
+      textSummary: pageContext.textSummary,
+      forms: sliceArr(pageContext.forms, Math.min(maxForms, 4)).map((form) => ({
+        ...form,
+        fields: sliceArr(form?.fields, maxFields),
+      })),
+      inputs: sliceArr(pageContext.inputs, maxInputs),
+      buttons: sliceArr(pageContext.buttons, maxButtons),
+      links: sliceArr(pageContext.links, maxLinks),
+      tables: [],
+      lists: [],
+      cards: [],
+      interactiveElements: [],
+    };
+  }
+
+  return {
+    ...pageContext,
+    links: sliceArr(pageContext.links, maxLinks),
+    buttons: sliceArr(pageContext.buttons, maxButtons),
+    inputs: sliceArr(pageContext.inputs, maxInputs),
+    interactiveElements: heavy ? [] : sliceArr(pageContext.interactiveElements, maxInter),
+    tables: sliceArr(pageContext.tables, heavy ? 2 : 4),
+    lists: sliceArr(pageContext.lists, heavy ? 0 : 6),
+    cards: sliceArr(pageContext.cards, heavy ? 0 : 4),
+    forms: sliceArr(pageContext.forms, maxForms).map((form) => ({
+      ...form,
+      fields: sliceArr(form?.fields, maxFields),
+    })),
+  };
+}
+
 function buildFocusedPageContext(goal, pageContext) {
   if (!pageContext || typeof pageContext !== 'object') return pageContext;
-  if (inferQueryType(goal) !== 'informational') return pageContext;
+  if (!shouldUseCompactPageContext(goal, pageContext)) return pageContext;
 
   const maxChars = Number.isFinite(CopilotSw?.CONFIG?.MAX_PAGE_CONTEXT_CHARS)
     ? CopilotSw.CONFIG.MAX_PAGE_CONTEXT_CHARS
     : 12000;
 
-  const focusedSections = pickRelevantSections(goal, pageContext, 6);
+  const goalForRanking =
+    (CopilotSw.agentState?.taskWorkflow?.originalInstruction &&
+      String(CopilotSw.agentState.taskWorkflow.originalInstruction)) ||
+    goal;
+
+  const listingN = Array.isArray(pageContext?.listingCandidates) ? pageContext.listingCandidates.length : 0;
+  const onRetailPdp = pageContext?.retailPageProfile?.likelyProductDetailPage === true;
+  const maxSec = listingN > 0 && !onRetailPdp ? 3 : 6;
+  const focusedSections = pickRelevantSections(goalForRanking, pageContext, maxSec);
+
+  const shortDef =
+    Number.isFinite(CopilotSw?.CONFIG?.LISTING_SHORTLIST_DEFAULT) &&
+    CopilotSw.CONFIG.LISTING_SHORTLIST_DEFAULT > 0
+      ? CopilotSw.CONFIG.LISTING_SHORTLIST_DEFAULT
+      : 5;
+  const shortMax =
+    Number.isFinite(CopilotSw?.CONFIG?.LISTING_SHORTLIST_MAX) &&
+    CopilotSw.CONFIG.LISTING_SHORTLIST_MAX > 0
+      ? CopilotSw.CONFIG.LISTING_SHORTLIST_MAX
+      : 10;
+
+  let candidatesBlock = '';
+  if (
+    Array.isArray(pageContext.listingCandidates) &&
+    pageContext.listingCandidates.length > 0 &&
+    pageContext.retailPageProfile?.likelyProductDetailPage !== true
+  ) {
+    const capped = pageContext.listingCandidates.slice(0, shortMax);
+    const primary = capped.slice(0, shortDef);
+    const extra = capped.slice(shortDef);
+    candidatesBlock =
+      `Top ${shortDef} ranked listing candidates (bounded from visible page inventory; agent_id clicks):\n${JSON.stringify(primary, null, 2)}\n`;
+    if (extra.length > 0) {
+      candidatesBlock += `\nAdditional ranked options (${shortDef + 1}–${capped.length}):\n${JSON.stringify(extra, null, 2)}\n`;
+    }
+    candidatesBlock += '\n';
+  }
 
   // ── Build sections text ──
   const stitchedText = focusedSections
     .map((section) => {
       const title = String(section?.title || '').trim();
-      const text = String(section?.text || '').trim();
+      const text = sectionTextBody(section);
       return title ? `${title}\n${text}` : text;
     })
     .filter(Boolean)
@@ -181,14 +308,16 @@ function buildFocusedPageContext(goal, pageContext) {
   }
 
   // ── Combine everything ──
-  const fullText = [stitchedText, tablesText].filter(Boolean).join('\n\n');
+  const fullText = [candidatesBlock, stitchedText, tablesText].filter(Boolean).join('\n\n');
 
-  return {
+  const compactCore = {
     ...pageContext,
     sections: focusedSections,
     textContent: clampText(fullText, maxChars),
     textContentLength: fullText.length,
   };
+
+  return compactCore;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -241,49 +370,150 @@ function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+/** Models sometimes emit trailing commas; strip only outside strings is error-prone, so this is best-effort. */
+function tryParseJsonObject(blob) {
+  const s = String(blob || '').trim();
+  if (!s) return null;
+  try {
+    return JSON.parse(s);
+  } catch {
+    try {
+      return JSON.parse(s.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']'));
+    } catch {
+      return null;
+    }
+  }
+}
+
+const CANONICAL_AGENT_ACTIONS = new Set([
+  'read_page',
+  'click_element',
+  'fill_input',
+  'extract_data',
+  'draft_reply',
+  'summarize_page',
+  'reset_form',
+  'final_answer',
+  'request_approval',
+]);
+
+function coerceThought(raw) {
+  if (typeof raw === 'string') return raw;
+  if (raw == null) return '';
+  try {
+    return JSON.stringify(raw);
+  } catch {
+    return String(raw);
+  }
+}
+
+function coerceAction(raw) {
+  if (typeof raw === 'string') return raw.trim();
+  if (typeof raw === 'number' || typeof raw === 'boolean') return String(raw).trim();
+  return '';
+}
+
+function coerceFinalAnswer(answer, thought) {
+  if (answer == null || answer === '') {
+    return thought.trim() ? thought : 'Done.';
+  }
+  if (typeof answer === 'string') return answer;
+  if (typeof answer === 'number' || typeof answer === 'boolean') return String(answer);
+  if (Array.isArray(answer)) {
+    return answer.map((item) => {
+      if (typeof item === 'string') return item;
+      if (item == null) return '';
+      if (typeof item === 'object') {
+        try {
+          return JSON.stringify(item);
+        } catch {
+          return String(item);
+        }
+      }
+      return String(item);
+    });
+  }
+  if (isPlainObject(answer)) {
+    try {
+      return Object.entries(answer)
+        .map(([k, v]) => {
+          const val =
+            v != null && typeof v === 'object' ? JSON.stringify(v) : v == null ? '' : String(v);
+          return `${k}: ${val}`;
+        })
+        .join('\n');
+    } catch {
+      try {
+        return JSON.stringify(answer);
+      } catch {
+        return String(answer);
+      }
+    }
+  }
+  return String(answer);
+}
+
 function validateStructuredResponse(payload) {
   if (!isPlainObject(payload)) return null;
 
-  const thought = typeof payload.thought === 'string' ? payload.thought : '';
-  const action = typeof payload.action === 'string' ? payload.action : '';
+  const thought = coerceThought(payload.thought);
+  let action = coerceAction(payload.action);
+  const actionLower = action.toLowerCase();
+  if (CANONICAL_AGENT_ACTIONS.has(actionLower)) {
+    action = actionLower;
+  }
+
   const actionInput = isPlainObject(payload.action_input) ? payload.action_input : {};
-  const answer = payload.answer;
 
-  if (!action.trim()) return null;
+  if (!action) return null;
 
+  let answer = payload.answer ?? null;
   if (action === 'final_answer') {
-    const isValidAnswer =
+    answer = coerceFinalAnswer(answer, thought);
+    const ok =
       typeof answer === 'string' ||
       (Array.isArray(answer) && answer.every((item) => typeof item === 'string'));
-    if (!isValidAnswer) return null;
+    if (!ok) return null;
   }
 
   return {
     thought,
     action,
     action_input: actionInput,
-    answer: answer ?? null,
+    answer,
   };
 }
 
-function parseStructuredResponse(content) {
-  // Try direct parse first
+function normalizeLlmMessageContent(content) {
+  if (content == null) return '';
+  if (typeof content === 'string') return content;
+  if (typeof content === 'object' && typeof content.content === 'string') return content.content;
   try {
-    return validateStructuredResponse(JSON.parse(content));
+    return JSON.stringify(content);
   } catch {
-    /* not valid JSON directly */
-  }
-
-  // Try extracting JSON from markdown/text wrapping
-  const extracted = extractFirstJsonObject(content);
-  if (!extracted) return null;
-
-  try {
-    return validateStructuredResponse(JSON.parse(extracted));
-  } catch {
-    return null;
+    return String(content);
   }
 }
+
+function parseStructuredResponse(content) {
+  const text = normalizeLlmMessageContent(content);
+
+  let parsed = tryParseJsonObject(text);
+  if (parsed) {
+    const v = validateStructuredResponse(parsed);
+    if (v) return v;
+  }
+
+  const extracted = extractFirstJsonObject(text);
+  if (!extracted) return null;
+
+  parsed = tryParseJsonObject(extracted);
+  if (!parsed) return null;
+
+  return validateStructuredResponse(parsed);
+}
+
+CopilotSw.parseStructuredResponse = parseStructuredResponse;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LLM API CALL
@@ -320,21 +550,117 @@ function buildAbortError() {
   );
 }
 
-CopilotSw.callLLM = async function callLLM(goal, pageContext, chatHistory) {
+function wrapNetworkError(error) {
+  if (!error || error.name === 'AbortError') return error;
+  const msg = String(error.message || '');
+  const likelyNetwork =
+    msg === 'Failed to fetch' ||
+    /failed to fetch|networkerror|load failed|net::/i.test(msg) ||
+    (error.name === 'TypeError' && /fetch|network/i.test(msg));
+  if (likelyNetwork) {
+    const base = CopilotSw.CONFIG?.BACKEND_URL || 'http://localhost:3000';
+    return new Error(
+      `Cannot reach the LLM backend at ${base}. Start the proxy (e.g. npm run dev from repo root), confirm the server is listening, and that the extension BACKEND_URL matches.`,
+    );
+  }
+  return error;
+}
+
+/** Aligns with read_page retailPageProfile + agent-runner URL heuristics (extension-only, for LLM routing). */
+function isRetailPdpPageContextForLlm(pageContext) {
+  if (pageContext?.retailPageProfile?.likelyProductDetailPage === true) return true;
+  const url = String(pageContext?.url || pageContext?.meta?.url || '').trim();
+  if (!url) return false;
+  try {
+    const p = new URL(url).pathname;
+    if (/itm[a-z0-9]{6,}/i.test(p)) return true;
+    if (/\/(?:dp|gp\/product)\/[A-Z0-9]{8,}/i.test(p)) return true;
+    if (/\/ip\/[^/]+/i.test(p)) return true;
+    if (/\/itm\/\d{6,}/i.test(p)) return true;
+    if (/\/listing\/\d+/i.test(p)) return true;
+    if (/\/products\/[a-z0-9][a-z0-9\-_%]{2,}\/?$/i.test(p)) return true;
+    if (/\/p\/[^/]+\/-\/A-\d+/i.test(p)) return true;
+    if (/\/\d{5,}\.p(?:\?|$|\/)/i.test(p)) return true;
+    if (/\/site\/[^/]+\/[^/]+\/\d+\.p\b/i.test(p)) return true;
+    if (/\/pdp\/[^/]+/i.test(p)) return true;
+    if (/\/product\.html/i.test(p)) return true;
+    if (/\/product\/[a-z0-9][a-z0-9\-_%]{2,}\/?$/i.test(p) && !/(?:category|categories|search|tag|shop)\b/i.test(p)) {
+      return true;
+    }
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
+/**
+ * Full chat stays in agentState for the UI. On PDP, the LLM only needs short intent + current pageContext;
+ * omit tool messages (large JSON) and older user/assistant SERP noise.
+ */
+function buildLlmChatHistoryForApi(chatHistory, pageContext) {
+  const base = Array.isArray(chatHistory) ? chatHistory.filter((m) => m && m.role !== 'navigation') : [];
+  if (!isRetailPdpPageContextForLlm(pageContext)) {
+    return base;
+  }
+  const tailN = Number(CopilotSw.CONFIG?.PDP_LLM_CHAT_HISTORY_TAIL);
+  if (tailN === 0) {
+    return base;
+  }
+  const n = Number.isFinite(tailN) && tailN > 0 ? Math.min(20, Math.floor(tailN)) : 6;
+  const ua = base.filter((m) => m.role === 'user' || m.role === 'assistant');
+  const tail = ua.slice(-n);
+  if (CopilotSw.CONFIG?.AGENT_DEBUG_LOGS === true) {
+    console.info('[ShoppingAgent]', 'LLM chatHistory PDP slim', {
+      before: base.length,
+      after: tail.length,
+      droppedTools: base.filter((m) => m.role === 'tool').length,
+    });
+  }
+  return tail.map((m) => ({
+    role: m.role,
+    content: m.content,
+    timestamp: m.timestamp,
+    toolsUsed: m.toolsUsed,
+    thought: m.thought,
+    listingQuickPick: m.listingQuickPick,
+  }));
+}
+
+CopilotSw.callLLM = async function callLLM(goal, pageContext, chatHistory, options = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), CopilotSw.CONFIG.LLM_TIMEOUT_MS);
   CopilotSw.activeLLMController = controller;
 
   try {
-    const focusedPageContext = buildFocusedPageContext(goal, pageContext);
+    const focusedPageContext = slimPageContextForLlmTransport(buildFocusedPageContext(goal, pageContext));
 
-    const llmHistory = chatHistory.filter((m) => m.role !== 'navigation');
+    const llmHistory =
+      options && options.preserveChatHistory === true
+        ? (Array.isArray(chatHistory) ? chatHistory.filter((m) => m && m.role !== 'navigation') : [])
+        : buildLlmChatHistoryForApi(chatHistory, pageContext);
     const payload = { goal, pageContext: focusedPageContext, chatHistory: llmHistory };
+
+    if (CopilotSw.CONFIG?.AGENT_DEBUG_LOGS === true) {
+      let jsonLen = 0;
+      try {
+        jsonLen = JSON.stringify(payload).length;
+      } catch {
+        jsonLen = -1;
+      }
+      console.info('[ShoppingAgent]', 'LLM /api/llm/chat request', {
+        payloadJsonChars: jsonLen,
+        chatMessages: llmHistory.length,
+        backendUrl: CopilotSw.CONFIG?.BACKEND_URL,
+        listingCount: Array.isArray(focusedPageContext?.listingCandidates)
+          ? focusedPageContext.listingCandidates.length
+          : 0,
+      });
+    }
 
     // ── First attempt ──
     const data = await fetchLLM('/api/llm/chat', payload, controller.signal);
     let parsed = parseStructuredResponse(data.content);
-    let lastRawContent = data.content;
+    let lastRawContent = normalizeLlmMessageContent(data.content);
 
     // ── Retry if parse failed ──
     if (!parsed) {
@@ -352,7 +678,56 @@ CopilotSw.callLLM = async function callLLM(goal, pageContext, chatHistory) {
     if (error.name === 'AbortError') {
       throw buildAbortError();
     }
-    throw error;
+    throw wrapNetworkError(error);
+  } finally {
+    clearTimeout(timeout);
+    if (CopilotSw.activeLLMController === controller) {
+      CopilotSw.activeLLMController = null;
+    }
+  }
+};
+
+function parseJsonObject(content) {
+  const source = String(content || '').trim();
+  try {
+    return JSON.parse(source);
+  } catch {
+    /* ignore */
+  }
+  const extracted = extractFirstJsonObject(source);
+  if (!extracted) return null;
+  try {
+    return JSON.parse(extracted);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Lightweight multi-step task plan (no DOM in prompt). Caller stores in taskWorkflow.plan.
+ */
+CopilotSw.callTaskPlanLLM = async function callTaskPlanLLM(goal, pageMeta) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), CopilotSw.CONFIG.LLM_TIMEOUT_MS);
+  CopilotSw.activeLLMController = controller;
+
+  try {
+    const payload = {
+      goal,
+      pageMeta: pageMeta || {},
+    };
+    const data = await fetchLLM('/api/llm/task-plan', payload, controller.signal);
+    const obj = parseJsonObject(data.content);
+    if (!obj || typeof obj !== 'object') {
+      return null;
+    }
+    return obj;
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw buildAbortError();
+    }
+    console.warn('[TaskPlan] LLM error:', error.message);
+    return null;
   } finally {
     clearTimeout(timeout);
     if (CopilotSw.activeLLMController === controller) {

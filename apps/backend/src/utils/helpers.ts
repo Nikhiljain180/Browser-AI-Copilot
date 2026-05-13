@@ -83,6 +83,32 @@ export function inferQueryType(goal: string): 'action' | 'informational' {
   return 'informational';
 }
 
+/**
+ * OpenAI Chat Completions may return 400 asking for `max_completion_tokens` instead of
+ * `max_tokens` — wording varies; we match on substrings, not model id.
+ */
+export function isOpenAIMaxTokensParameterError(error: unknown): boolean {
+  const msg = String((error as Error)?.message || '').toLowerCase();
+  return (
+    msg.includes('max_tokens') &&
+    msg.includes('max_completion_tokens') &&
+    (msg.includes('unsupported') || msg.includes('not support'))
+  );
+}
+
+/**
+ * Some OpenAI Chat Completions models only accept the API default temperature; we detect from the
+ * 400 message and retry without sending `temperature`.
+ */
+export function isOpenAITemperatureNotSupportedError(error: unknown): boolean {
+  const msg = String((error as Error)?.message || '').toLowerCase();
+  return (
+    msg.includes('temperature') &&
+    (msg.includes('unsupported') || msg.includes('not support')) &&
+    (msg.includes('default') || msg.includes('only'))
+  );
+}
+
 export function isRetryableLLMError(error: any): boolean {
   const status = error?.status || error?.statusCode || error?.code;
   const message = String(error?.message || '').toLowerCase();

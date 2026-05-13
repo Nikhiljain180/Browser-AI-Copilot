@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Shopping mock — agent E2E fixture</title>
+</head>
+<body data-e2e-fixture="amazon-shopping-mock">
+  <!-- Minimal storefront shape (no external assets). Matches mocked LLM selectors. -->
+  <main>
+    <div id="home-pane">
+      <label for="twotabsearchtextbox">Search Amazon Mock</label>
+      <input type="text" id="twotabsearchtextbox" name="field-keywords" autocomplete="off" spellcheck="false" />
+      <button type="button" id="nav-search-submit-button">Go</button>
+    </div>
+    <div id="results-pane" hidden>
+      <h2>Sponsored-free mock results</h2>
+      <div class="s-result-item" data-asin="MOCK001">
+        <button type="button" id="add-to-cart-button">Add to cart</button>
+      </div>
+    </div>
+    <div id="cart-status" aria-live="polite" data-added="false"></div>
+  </main>
+  <script>
+    (function () {
+      var go = document.getElementById('nav-search-submit-button');
+      var hp = document.getElementById('home-pane');
+      var rp = document.getElementById('results-pane');
+      var add = document.getElementById('add-to-cart-button');
+      var status = document.getElementById('cart-status');
+      go.addEventListener('click', function () {
+        hp.setAttribute('hidden', '');
+        rp.removeAttribute('hidden');
+      });
+      add.addEventListener('click', function () {
+        status.textContent = 'Added';
+        status.setAttribute('data-added', 'true');
+      });
+    })();
+  </script>
+</body>
+</html>

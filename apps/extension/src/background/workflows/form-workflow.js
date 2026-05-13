@@ -640,10 +640,10 @@ async function handleExplicitSubmit(goal, pageContext, formsInventory, session, 
       });
     }
 
-    const refreshedContext = await CopilotSw.sendMessageToTab(tabId, {
-      action: 'readPage',
-      focusArea: null,
-    }).catch(() => null);
+    const refreshedContext = await CopilotSw.sendMessageToTab(
+      tabId,
+      CopilotSw.buildReadPageMessage(null),
+    ).catch(() => null);
 
     if (refreshedContext) {
       latestFormsInventory = CopilotSw.buildFormsInventory(refreshedContext);

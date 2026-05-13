@@ -1,10 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 
 export interface PageContext {
-  url: string;
+  url?: string;
   title?: string;
   textContent?: string;
   textContentLength?: number;
+  listingCandidates?: Array<Record<string, unknown>>;
+  /** Optional hints from the extension `read_page` payload (URL-derived). */
+  retailPageProfile?: { likelyProductDetailPage?: boolean };
   buttons?: Array<{ text: string }>;
   links?: Array<{ text: string; href: string }>;
   forms?: unknown[];
@@ -52,6 +55,14 @@ export interface LLMStreamRequestBody {
   goal: string;
   pageContext?: PageContext | null;
   chatHistory?: ChatMessage[];
+}
+
+export interface TaskPlanRequestBody {
+  goal: string;
+  pageMeta?: {
+    url?: string;
+    title?: string;
+  };
 }
 
 export interface FormPlanRequestBody {

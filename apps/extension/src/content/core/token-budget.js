@@ -18,8 +18,14 @@ function applyTokenBudget(tree) {
     sections: Math.floor(maxTokens * 0.15),
   };
 
+  const harvestPinnedAgent = /^(purchase_cta_|orderflow_continue_)/;
+
+  const rawButtons = Array.isArray(tree.buttons) ? tree.buttons : [];
+  const pinned = rawButtons.filter((b) => harvestPinnedAgent.test(String(b?.agentId || '')));
+  const pool = rawButtons.filter((b) => !harvestPinnedAgent.test(String(b?.agentId || '')));
+
   let buttonsTokens = 0;
-  tree.buttons = tree.buttons
+  const kept = pool
     .sort((a, b) => (b.visible ? 1 : -1) - (a.visible ? 1 : -1))
     .filter((btn) => {
       const tokens = estimateTokens(btn.text);
@@ -29,6 +35,15 @@ function applyTokenBudget(tree) {
       }
       return false;
     });
+
+  const seenBtn = new Set();
+  tree.buttons = [];
+  for (const b of [...pinned, ...kept]) {
+    const id = b?.agentId;
+    if (!id || seenBtn.has(id)) continue;
+    seenBtn.add(id);
+    tree.buttons.push(b);
+  }
 
   let linksTokens = 0;
   tree.links = tree.links.filter((link) => {

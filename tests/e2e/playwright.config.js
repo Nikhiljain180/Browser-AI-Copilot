@@ -1,11 +1,8 @@
 /**
  * Playwright E2E Test Configuration
  *
- * Runs end-to-end tests for:
- * 1. Single-step summarization
- * 2. Multi-step workflow (read → click → extract)
- * 3. HITL approval gate
- * 4. Error recovery
+ * Primary workflow: `npm run test:e2e` runs Amazon live navigation only (`amazon-search-steps.spec.js`).
+ * Use `npm run test:e2e:all` to run extension fixture / demo specs in this folder as well.
  */
 
 const { defineConfig, devices } = require('@playwright/test');

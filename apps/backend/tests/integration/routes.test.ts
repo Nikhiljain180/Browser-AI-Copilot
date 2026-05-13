@@ -22,6 +22,13 @@ describe('LLM Routes', () => {
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('goal is required');
   });
+
+  it('POST /api/llm/task-plan should return 400 without goal', async () => {
+    const res = await request(app).post('/api/llm/task-plan').send({ pageMeta: {} });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('goal is required');
+  });
 });
 
 describe('Form Routes', () => {

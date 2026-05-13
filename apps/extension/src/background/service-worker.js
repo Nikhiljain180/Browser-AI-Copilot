@@ -7,6 +7,7 @@
 
 importScripts(
   './sw-namespace.js',
+  './utils/listing-choice.js',
   './core/config.js',
   './core/state.js',
   './core/ui.js',
@@ -24,6 +25,8 @@ importScripts(
   './workflows/form-api.js',
   './workflows/form-workflow.js',
   './llm/llm.js',
+  './infer-transactional-intent.js',
+  './task-workflow.js',
   './agent/agent-runner.js',
 );
 
@@ -62,7 +65,7 @@ async function handleGetChatHistory(tabId) {
     history: CopilotSw.agentState.chatHistory,
     isRunning: CopilotSw.agentState.isRunning,
     iteration: CopilotSw.agentState.iterationCount,
-    maxIterations: CopilotSw.CONFIG.MAX_REACT_ITERATIONS,
+    maxIterations: CopilotSw.getTaskWorkflowMaxIterations?.() ?? CopilotSw.CONFIG.MAX_REACT_ITERATIONS,
     currentGoal: CopilotSw.agentState.currentGoal,
   };
 }
@@ -100,14 +103,25 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       const tabId = requireTabId(request);
       return handleGetChatHistory(tabId);
     },
+    openListingPick: async () => {
+      const tabId = requireTabId(request);
+      const pickKey = request.pickKey != null ? String(request.pickKey) : '';
+      return CopilotSw.handleOpenListingPick(tabId, pickKey);
+    },
     pageContextChanged: async () => {
       const tabId = sender?.tab?.id;
       if (!tabId) return { ok: true };
       try {
         await CopilotSw.ensureContentScriptInjected(tabId);
+        const cfg = CopilotSw.CONFIG || {};
         const pageContext = await CopilotSw.sendMessageToTab(tabId, {
           action: 'readPage',
           focusArea: null,
+          readMode: 'full',
+          rankingQuery: '',
+          listingRankPool: Number(cfg.LISTING_RANK_POOL) > 0 ? Number(cfg.LISTING_RANK_POOL) : 48,
+          listingShortlistDefault: Number(cfg.LISTING_SHORTLIST_DEFAULT) > 0 ? Number(cfg.LISTING_SHORTLIST_DEFAULT) : 5,
+          listingShortlistMax: Number(cfg.LISTING_SHORTLIST_MAX) > 0 ? Number(cfg.LISTING_SHORTLIST_MAX) : 10,
         });
         await CopilotSw.patchTabSessionPageContext(tabId, pageContext);
       } catch (_) {

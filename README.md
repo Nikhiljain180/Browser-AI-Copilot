@@ -288,8 +288,17 @@ npm run test:unit
 # Run backend integration tests (Jest + ts-jest)
 npm run test:integration
 
-# Run E2E tests (Playwright)
+# Run E2E tests — Amazon live flow only (needs network + `npx playwright install chromium`)
 npm run test:e2e
+
+# All Playwright specs in tests/e2e (extension fixtures + demos + Amazon)
+npm run test:e2e:all
+
+# Automated shopping-agent wiring (mock LLM — no API keys)
+npm run test:e2e:amazon-agent
+
+# Demo HTML + loaded extension (needs LLM / API keys)
+npm run test:e2e:demo
 
 # Run all tests (backend + extension)
 npm test

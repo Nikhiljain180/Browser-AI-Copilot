@@ -113,3 +113,40 @@ CopilotSw.sendMessageToTab = async function sendMessageToTab(tabId, message) {
     return chrome.tabs.sendMessage(tabId, message);
   }
 };
+
+/**
+ * readPage payload with listing shortlist settings + optional ranking hint from task-plan / goal.
+ */
+CopilotSw.buildReadPageMessage = function buildReadPageMessage(focusArea = null, readMode = 'full') {
+  const cfg = CopilotSw.CONFIG || {};
+  const plan = CopilotSw.agentState?.taskWorkflow?.plan;
+  const searchTerms = plan && typeof plan === 'object' && plan.searchTerms ? String(plan.searchTerms).trim() : '';
+  const constraints =
+    plan && typeof plan === 'object' && Array.isArray(plan.constraints)
+      ? plan.constraints.map((x) => String(x)).join(' ').trim()
+      : '';
+  const goal = CopilotSw.agentState?.currentGoal ? String(CopilotSw.agentState.currentGoal).trim() : '';
+  const rankingQuery = `${searchTerms} ${constraints} ${goal}`.trim().slice(0, 800);
+
+  const pool = Number(cfg.LISTING_RANK_POOL);
+  const def = Number(cfg.LISTING_SHORTLIST_DEFAULT);
+  const max = Number(cfg.LISTING_SHORTLIST_MAX);
+
+  const mode = readMode === 'light' ? 'light' : 'full';
+
+  const prefetchListingScroll =
+    mode === 'full' &&
+    CopilotSw.isTaskWorkflowActive?.() === true &&
+    (CopilotSw.agentState?.iterationCount || 0) === 0;
+
+  return {
+    action: 'readPage',
+    focusArea,
+    readMode: mode,
+    rankingQuery,
+    listingRankPool: pool > 0 ? pool : 48,
+    listingShortlistDefault: def > 0 ? def : 5,
+    listingShortlistMax: max > 0 ? max : 10,
+    prefetchListingScroll,
+  };
+};

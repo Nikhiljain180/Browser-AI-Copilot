@@ -16,7 +16,10 @@ export function initializeLLM(provider: string = config.llm.provider): void {
 
   if (provider === 'openai') {
     const { OpenAI } = require('openai');
-    llmClient = new OpenAI({ apiKey });
+    const baseURL = config.apiKeys.openaiBaseURL;
+    llmClient = baseURL
+      ? new OpenAI({ apiKey, baseURL })
+      : new OpenAI({ apiKey });
   } else if (provider === 'anthropic') {
     const Anthropic = require('@anthropic-ai/sdk').default;
     llmClient = new Anthropic({ apiKey });

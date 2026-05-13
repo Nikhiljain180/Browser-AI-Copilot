@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { JSDOM } from 'jsdom';
 
 // Test the structural contract of the accessibility tree output
 // and the token budget truncation logic
@@ -159,5 +160,16 @@ describe('read_page — DOM element extraction (jsdom)', () => {
     const link = container.querySelector('a');
     expect(link.href).toContain('example.com');
     expect(link.textContent).toBe('Example');
+  });
+
+  it('product card fixture exposes same-origin PDP anchor for enrichment', () => {
+    const dom = new JSDOM(
+      `<!DOCTYPE html><html><body><div class="grid"><div class="card"><h3>Test Shades</h3><a href="https://www.amazon.com/dp/B0ABCDEF123">View</a></div></div></body></html>`,
+      { url: 'https://www.amazon.com/s?k=sunglasses' },
+    );
+    const card = dom.window.document.querySelector('.card');
+    const a = card.querySelector('a[href]');
+    expect(a).toBeTruthy();
+    expect(a.href).toContain('/dp/B0ABCDEF123');
   });
 });

@@ -69,6 +69,27 @@ export function summarizePageContext(pageContext: PageContext | null | undefined
 
   const forms = Array.isArray(pageContext.forms) ? (pageContext.forms as ContextForm[]) : [];
 
+  /** Matches extension listing shortlist cap shown in compact summary (not env-specific). */
+  const listingShortlistMax = 10;
+
+  const listingLines = Array.isArray(pageContext.listingCandidates)
+    ? pageContext.listingCandidates
+        .slice(0, listingShortlistMax)
+        .map((row, i) => {
+          const rec = row as {
+            name?: unknown;
+            title?: unknown;
+            price?: unknown;
+            agentId?: unknown;
+          };
+          const name = String(rec.name ?? rec.title ?? '').slice(0, 100);
+          const price = String(rec.price ?? '');
+          const aid = String(rec.agentId ?? '');
+          return `  ${i + 1}. ${name || '(item)'} ${price ? `— ${price}` : ''} ${aid ? `[agent: ${aid}]` : ''}`;
+        })
+        .join('\n')
+    : '';
+
   const formsPreviewRaw = forms
     .slice(0, 5)
     .map((form: ContextForm, formIndex: number) => {
@@ -93,6 +114,9 @@ export function summarizePageContext(pageContext: PageContext | null | undefined
   return `
 Page: ${pageContext.title || pageContext.url}
 URL: ${pageContext.url}
+
+Structured listingCandidates (compact ranked shortlist, up to ${listingShortlistMax} shown):
+${listingLines || 'None'}
 
 Key Elements:
 - Buttons: ${buttonsPreview}

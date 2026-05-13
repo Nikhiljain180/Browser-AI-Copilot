@@ -33,7 +33,12 @@
         :key="`${message.timestamp || index}-${message.role}-${index}`"
       >
         <ActivityCard v-if="message.role === 'tool'" :message="message" />
-        <ChatMessage v-else :message="message" />
+        <ChatMessage
+          v-else
+          :message="message"
+          :is-agent-running="isRunning"
+          :browser-tab-id="browserTabId"
+        />
       </template>
     </template>
 
@@ -58,6 +63,7 @@ import ActivityCard from './ActivityCard.vue';
 defineProps({
   isHydrated: { type: Boolean, default: false },
   isRunning: { type: Boolean, default: false },
+  browserTabId: { type: Number, default: null },
   visibleMessages: { type: Array, default: () => [] },
   livePhaseLabel: { type: String, default: 'Working' },
   liveStatusDetail: { type: String, default: '' },

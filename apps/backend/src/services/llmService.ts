@@ -5,15 +5,28 @@ import {
   FORM_FILL_SYSTEM_PROMPT,
   INTENT_PLAN_SYSTEM_PROMPT,
   PENDING_FIELD_REPLY_MAP_PROMPT,
+  TASK_PLAN_SYSTEM_PROMPT,
 } from '../prompts';
 import {
   delay,
   normalizeMessageContent,
   inferQueryType,
   isRetryableLLMError,
+  isOpenAIMaxTokensParameterError,
+  isOpenAITemperatureNotSupportedError,
 } from '../utils/helpers';
 import { summarizePageContext } from '../utils/pageContext';
 import { ChatMessage, PageContext, LLMCallOptions, ConversationMessage } from '../types';
+
+function isSingleProductPdpContext(goal: string, pageContext: PageContext | null | undefined): boolean {
+  const pc = pageContext as Record<string, unknown> | null | undefined;
+  const profile = pc?.retailPageProfile as { likelyProductDetailPage?: boolean } | undefined;
+  if (profile?.likelyProductDetailPage === true) return true;
+  const g = String(goal || '');
+  if (/Continue the same shopping task on this product page/i.test(g)) return true;
+  if (/You are on the correct product page i picked/i.test(g)) return true;
+  return false;
+}
 
 export function buildConversationMessages(
   goal: string,
@@ -40,9 +53,14 @@ export function buildConversationMessages(
   });
 
   const contextSummary = summarizePageContext(pageContext);
+  const pdpMode = isSingleProductPdpContext(goal, pageContext);
+  const pdpDirective = pdpMode
+    ? `\n\n[AGENT MODE: SINGLE-PRODUCT PDP — USER ALREADY CHOSE THIS LISTING]\n- Next step: **click_element** on the page's primary purchase CTA using **agent_id** from the Buttons list in the page summary. Skip read_page unless you have no button inventory at all.\n- Forbidden here: **final_answer** that only suggests a different model, "search for X", or speculative configuration advice **before** you have attempted that purchase click. If a variant sheet appears, use **click_element** to pick an in-stock option then **Continue** / confirm on the sheet.\n`
+    : '';
+
   messages.push({
     role: 'user',
-    content: `Query Type: ${queryType}\n\nCurrent page:\n${contextSummary}\n\nGoal: ${goal}`,
+    content: `Query Type: ${queryType}\n\nCurrent page:\n${contextSummary}\n\nGoal: ${goal}${pdpDirective}`,
   });
 
   return messages;
@@ -112,6 +130,24 @@ export function buildIntentPlanMessages(
   ];
 }
 
+export interface TaskPlanPageMeta {
+  url?: string;
+  title?: string;
+}
+
+export function buildTaskPlanMessages(goal: string, pageMeta: TaskPlanPageMeta = {}): ConversationMessage[] {
+  const safeUrl = String(pageMeta.url || '').slice(0, 500);
+  const safeTitle = String(pageMeta.title || '').slice(0, 240);
+  return [
+    { role: 'system', content: TASK_PLAN_SYSTEM_PROMPT },
+    {
+      role: 'user',
+      content:
+        `User instruction (single session goal):\n${goal}\n\nPage metadata only (no DOM):\nURL: ${safeUrl || 'unknown'}\nTitle: ${safeTitle || 'unknown'}\n\nIf searchLandingUrlTemplate is set, use the SAME origin (scheme + host + port) as URL above exactly once with {query} as the encoded search placeholder.\n\nReturn JSON plan only.`,
+    },
+  ];
+}
+
 export async function callLLMWithTimeout(
   messages: ConversationMessage[],
   timeoutMs: number,
@@ -134,12 +170,41 @@ export async function callLLMWithTimeout(
       let requestPromise: Promise<any>;
 
       if (provider === 'openai') {
-        requestPromise = client.chat.completions.create({
-          model,
-          messages: messages.map((m) => ({ role: m.role, content: m.content })),
-          temperature: options.temperature ?? 0.7,
-          max_tokens: options.max_tokens ?? 1000,
-        });
+        const mappedMessages = messages.map((m) => ({ role: m.role, content: m.content }));
+        const temperature = options.temperature ?? 0.7;
+        const maxOut = options.max_tokens ?? 1000;
+
+        type LimitField = 'max_tokens' | 'max_completion_tokens';
+        let limitField: LimitField = 'max_tokens';
+        let sendTemperature = true;
+
+        requestPromise = (async () => {
+          for (let adaptiveAttempt = 0; adaptiveAttempt < 5; adaptiveAttempt++) {
+            const body: Record<string, unknown> = {
+              model,
+              messages: mappedMessages,
+            };
+            if (sendTemperature) {
+              body.temperature = temperature;
+            }
+            body[limitField] = maxOut;
+
+            try {
+              return await client.chat.completions.create(body as any);
+            } catch (err: unknown) {
+              if (isOpenAIMaxTokensParameterError(err) && limitField === 'max_tokens') {
+                limitField = 'max_completion_tokens';
+                continue;
+              }
+              if (isOpenAITemperatureNotSupportedError(err) && sendTemperature) {
+                sendTemperature = false;
+                continue;
+              }
+              throw err;
+            }
+          }
+          throw new Error('OpenAI chat.completions retries exhausted');
+        })();
       } else if (provider === 'anthropic') {
         requestPromise = client.messages.create({
           model,

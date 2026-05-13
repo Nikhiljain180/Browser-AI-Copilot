@@ -30,8 +30,20 @@ const config = {
   },
 
   apiKeys: {
+    /**
+     * Not limited to OpenAI.com: same SDK/key slot for any OpenAI-compatible API (OpenCode Zen, OpenRouter, etc.).
+     * Use OPENAI_API_KEY or OPENCODE_API_KEY (Zen key from opencode.ai/zen).
+     */
     get openai(): string | undefined {
-      return process.env.OPENAI_API_KEY;
+      const direct = process.env.OPENAI_API_KEY?.trim();
+      const zen = process.env.OPENCODE_API_KEY?.trim();
+      return direct || zen || undefined;
+    },
+    /** OpenAI-compatible chat Completions API (omit for api.openai.com). Used by OpenRouter, OpenCode Zen, local proxies, etc. */
+    get openaiBaseURL(): string | undefined {
+      const raw = process.env.OPENAI_BASE_URL?.trim();
+      if (!raw) return undefined;
+      return raw.replace(/\/?$/, '');
     },
     get anthropic(): string | undefined {
       return process.env.ANTHROPIC_API_KEY;
